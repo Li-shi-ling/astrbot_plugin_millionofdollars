@@ -1,14 +1,23 @@
-# astrbot-plugin-helloworld
+# astrbot_plugin_millionofdollars
 
-AstrBot 插件模板 / A template plugin for AstrBot plugin feature
+《百万美金》（Millions of Dollars）桌游的 AstrBot 插件项目。
 
-> [!NOTE]
-> This repo is just a template of [AstrBot](https://github.com/AstrBotDevs/AstrBot) Plugin.
-> 
-> [AstrBot](https://github.com/AstrBotDevs/AstrBot) is an agentic assistant for both personal and group conversations. It can be deployed across dozens of mainstream instant messaging platforms, including QQ, Telegram, Feishu, DingTalk, Slack, LINE, Discord, Matrix, etc. In addition, it provides a reliable and extensible conversational AI infrastructure for individuals, developers, and teams. Whether you need a personal AI companion, an intelligent customer support agent, an automation assistant, or an enterprise knowledge base, AstrBot enables you to quickly build AI applications directly within your existing messaging workflows.
+当前版本已完成规则资料归档，后续游戏功能以 2016 年初版规则为实现基线。
 
-# Supports
+## 规则文档
 
-- [AstrBot Repo](https://github.com/AstrBotDevs/AstrBot)
-- [AstrBot Plugin Development Docs (Chinese)](https://docs.astrbot.app/dev/star/plugin-new.html)
-- [AstrBot Plugin Development Docs (English)](https://docs.astrbot.app/en/dev/star/plugin-new.html)
+- [完整中文规则](./docs/million-of-dollars-rules-zh.md)
+- [资料来源与版本说明](./docs/README.md)
+- [2016 初版英文规则书 PDF](./docs/sources/millions-of-dollars-2016-rulebook-en.pdf)
+- [2024 二版英文规则书 PDF](./docs/sources/millions-of-dollars-2024-rulebook-en.pdf)
+
+2016 初版与 2024 二版的轮数、胜利金额和角色体系均不同，插件开发不得混用两个版本的规则。
+
+## 项目状态
+
+插件代码目前仍处于模板初始化阶段，尚未提供可玩的《百万美金》游戏指令。
+
+## 相关链接
+
+- [AstrBot 项目](https://github.com/AstrBotDevs/AstrBot)
+- [AstrBot 插件开发文档](https://docs.astrbot.app/dev/star/plugin-new.html)
