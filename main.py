@@ -39,7 +39,7 @@ COMMAND_NAME = "百万美金"
 DB_FILENAME = "millionofdollars.sqlite3"
 SECRET_FILENAME = "hmac_secret.bin"
 
-_KNOWN_SUBCOMMANDS = (
+_KNOWN_ACTIONS = (
     # 长指令必须排在短指令之前，否则 "退出房间" 会被 "退出" 抢先匹配
     "取消准备",
     "强制抢劫",
@@ -65,37 +65,29 @@ _KNOWN_SUBCOMMANDS = (
     "操作",
 )
 
-COMMAND_ALIASES = {
-    f"{COMMAND_NAME}{name}"
-    for name in (
-        "创建",
-        "加入",
-        "退出房间",
-        "退出",
-        "关闭",
-        "关闭房间",
-        "结束",
-        "解散",
-        "开始",
-        "状态",
-        "菜单",
-        "转账",
-        "准备",
-        "取消准备",
-        "使用威胁牌",
-        "威胁牌",
-        "强制抢劫",
-        "帮助",
-        "规则",
-        "规则卡",
-        "选角",
-        "操作",
-    )
-}
-"""无空格写法（如 ``百万美金创建``）也注册成别名，避免漏进默认 LLM 链路。"""
+REGISTERED_COMMANDS = (
+    "百万美金",
+    "百万美金菜单",
+    "百万美金帮助",
+    "百万美金创建",
+    "百万美金加入",
+    "百万美金退出房间",
+    "百万美金关闭",
+    "百万美金开始",
+    "百万美金状态",
+    "百万美金选角",
+    "百万美金转账",
+    "百万美金退出",
+    "百万美金准备",
+    "百万美金取消准备",
+    "百万美金强制抢劫",
+    "百万美金使用威胁牌",
+    "百万美金操作",
+)
+"""AstrBot 指令列表中公开显示的完整命令。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.3")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.4")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -118,13 +110,129 @@ class MillionsOfDollarsPlugin(Star):
     # ------------------------------------------------------------------
 
     @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
-    @filter.command(COMMAND_NAME, alias=COMMAND_ALIASES)
+    @filter.command("百万美金")
     async def million_dollars(self, event: AstrMessageEvent):
-        """《百万美金》主指令。
+        """打开《百万美金》快捷操作菜单。"""
+        async for result in self._handle_registered_command(event):
+            yield result
 
-        所有分支最后都会 :meth:`stop_event`，避免消息继续落到 AstrBot 默认 LLM
-        链路（其它插件同样做法）。无空格写法（``百万美金创建``）通过别名命中。
-        """
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金菜单")
+    async def million_dollars_menu(self, event: AstrMessageEvent):
+        """打开《百万美金》快捷操作菜单。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金帮助", alias={"百万美金规则", "百万美金规则卡"})
+    async def million_dollars_help(self, event: AstrMessageEvent):
+        """查看《百万美金》玩法说明和规则卡。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金创建")
+    async def million_dollars_create(self, event: AstrMessageEvent):
+        """在当前群创建房间并成为首领。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金加入")
+    async def million_dollars_join(self, event: AstrMessageEvent):
+        """加入当前群等待开始的房间。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金退出房间")
+    async def million_dollars_leave_room(self, event: AstrMessageEvent):
+        """在游戏开始前退出当前房间。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command(
+        "百万美金关闭",
+        alias={"百万美金关闭房间", "百万美金结束", "百万美金解散"},
+    )
+    async def million_dollars_close(self, event: AstrMessageEvent):
+        """由首领或管理员关闭当前房间。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金开始")
+    async def million_dollars_start(self, event: AstrMessageEvent):
+        """由首领开始当前群的游戏。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金状态")
+    async def million_dollars_status(self, event: AstrMessageEvent):
+        """查看当前房间和游戏状态。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金选角")
+    async def million_dollars_roles(self, event: AstrMessageEvent):
+        """重新获取自己的秘密选角按钮。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金转账")
+    async def million_dollars_transfer(self, event: AstrMessageEvent):
+        """选择收款玩家和转账金额。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金退出")
+    async def million_dollars_leave_round(self, event: AstrMessageEvent):
+        """退出当前回合并收回对应保证金。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金准备")
+    async def million_dollars_ready(self, event: AstrMessageEvent):
+        """在谈判阶段标记自己已经准备。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金取消准备")
+    async def million_dollars_unready(self, event: AstrMessageEvent):
+        """取消自己的谈判准备状态。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金强制抢劫")
+    async def million_dollars_force_rob(self, event: AstrMessageEvent):
+        """谈判超时后由首领强制开始抢劫。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金使用威胁牌", alias={"百万美金威胁牌"})
+    async def million_dollars_threat(self, event: AstrMessageEvent):
+        """使用一张威胁牌查看其他人物身份。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    @filter.event_message_type(filter.EventMessageType.GROUP_MESSAGE)
+    @filter.command("百万美金操作")
+    async def million_dollars_action(self, event: AstrMessageEvent):
+        """处理由秘密按钮生成的一次性操作令牌。"""
+        async for result in self._handle_registered_command(event):
+            yield result
+
+    async def _handle_registered_command(self, event: AstrMessageEvent):
+        """让每个完整注册指令共用身份提取、异常处理与 QQ 回复流程。"""
         try:
             if not qqofficial.is_qqofficial_message_event(event):
                 yield event.plain_result("《百万美金》目前仅支持 QQ 官方机器人群聊。")
@@ -176,48 +284,48 @@ class MillionsOfDollarsPlugin(Star):
         if service is None:
             return Reply("插件尚未初始化完成，请稍后重试。")
 
-        subcommand, argument = _parse_command(message_str)
+        action, argument = _parse_command(message_str)
 
-        if subcommand in {"", "菜单"}:
+        if action in {"", "菜单"}:
             return await service.menu(request)
-        if subcommand in {"帮助", "规则", "规则卡", "help"}:
+        if action in {"帮助", "规则", "规则卡", "help"}:
             return await service.help(request)
-        if subcommand == "选角":
+        if action == "选角":
             return await service.role_menu(request)
-        if subcommand == "创建":
+        if action == "创建":
             return await service.create(request)
-        if subcommand == "加入":
+        if action == "加入":
             return await service.join(request)
-        if subcommand == "开始":
+        if action == "开始":
             return await service.start(request)
-        if subcommand == "状态":
+        if action == "状态":
             return await service.status(request)
-        if subcommand == "转账":
+        if action == "转账":
             if argument:
                 return await service.transfer_amounts(request, argument)
             return await service.transfer_menu(request)
-        if subcommand == "退出房间":
+        if action == "退出房间":
             return await service.leave_room(request)
-        if subcommand in {"关闭", "关闭房间", "结束", "解散"}:
+        if action in {"关闭", "关闭房间", "结束", "解散"}:
             return await service.close_room(request)
-        if subcommand == "退出":
+        if action == "退出":
             return await service.leave_menu(request)
-        if subcommand == "准备":
+        if action == "准备":
             return await service.set_ready(request, True)
-        if subcommand == "取消准备":
+        if action == "取消准备":
             return await service.set_ready(request, False)
-        if subcommand == "强制抢劫":
+        if action == "强制抢劫":
             return await service.force_rob(request)
-        if subcommand in {"使用威胁牌", "威胁牌"}:
+        if action in {"使用威胁牌", "威胁牌"}:
             return await service.threat_card_menu(request)
-        if subcommand == "操作":
+        if action == "操作":
             if not argument:
                 return Reply("缺少操作令牌，请重新点击按钮。")
             return await service.handle_token(request, argument)
 
         return Reply(
-            f"没有「{subcommand}」这个操作。\n"
-            "发送「百万美金 菜单」看看当前能做什么，或发送「百万美金 帮助」查看规则卡。"
+            f"没有「{action}」这个操作。\n"
+            "发送「百万美金菜单」看看当前能做什么，或发送「百万美金帮助」查看规则卡。"
         )
 
 
@@ -255,7 +363,7 @@ def _is_admin(event: AstrMessageEvent) -> bool:
 
 
 def _parse_command(message_str: str) -> tuple[str, str]:
-    """从消息中取出子指令与参数。
+    """从完整注册指令中取出游戏动作与参数。
 
     兼容 ``百万美金 创建``、``/百万美金 创建`` 与 ``百万美金创建`` 三种写法。
     """
@@ -268,7 +376,7 @@ def _parse_command(message_str: str) -> tuple[str, str]:
     if not text:
         return "", ""
 
-    for name in _KNOWN_SUBCOMMANDS:
+    for name in _KNOWN_ACTIONS:
         if text.startswith(name):
             return name, text[len(name) :].strip()
 

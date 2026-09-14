@@ -102,12 +102,12 @@ def test_extract_context_returns_none_without_identity() -> None:
 
 def test_public_button_uses_permission_type_two() -> None:
     button = qqofficial.build_button(
-        ButtonSpec("mod_start", "开始", "百万美金 开始")
+        ButtonSpec("mod_start", "开始", "百万美金开始")
     )
 
     assert button["action"]["type"] == 2
     assert button["action"]["permission"] == {"type": 2}
-    assert button["action"]["data"] == "百万美金 开始"
+    assert button["action"]["data"] == "百万美金开始"
     assert button["action"]["enter"] is False
     assert button["action"]["reply"] is True
     assert button["render_data"]["visited_label"] == "已提交"
@@ -115,7 +115,7 @@ def test_public_button_uses_permission_type_two() -> None:
 
 def test_private_button_uses_permission_type_zero() -> None:
     button = qqofficial.build_button(
-        ButtonSpec("mod_role", "司机", "百万美金 操作 token", only_for="user-a")
+        ButtonSpec("mod_role", "司机", "百万美金操作 token", only_for="user-a")
     )
 
     assert button["action"]["permission"] == {
@@ -126,7 +126,7 @@ def test_private_button_uses_permission_type_zero() -> None:
 
 def test_secret_button_never_leaks_role_in_visited_label() -> None:
     button = qqofficial.build_button(
-        ButtonSpec("mod_role", "司机", "百万美金 操作 token")
+        ButtonSpec("mod_role", "司机", "百万美金操作 token")
     )
 
     assert button["render_data"]["visited_label"] == "已提交"
@@ -151,7 +151,7 @@ def test_threat_card_button_is_plaintext_and_private() -> None:
 
 
 def test_keyboard_chunks_five_buttons_per_row_and_caps_total() -> None:
-    buttons = [ButtonSpec(f"b{index}", f"按钮{index}", "百万美金 状态") for index in range(30)]
+    buttons = [ButtonSpec(f"b{index}", f"按钮{index}", "百万美金状态") for index in range(30)]
 
     keyboard = qqofficial.build_keyboard(buttons)
 
@@ -169,7 +169,7 @@ def test_keyboard_is_none_without_buttons() -> None:
 def test_build_payload_uses_markdown_when_buttons_exist() -> None:
     reply = Reply(
         text="请选择操作",
-        buttons=[ButtonSpec("mod_1", "状态", "百万美金 状态")],
+        buttons=[ButtonSpec("mod_1", "状态", "百万美金状态")],
     )
 
     payload = qqofficial.build_payload(reply)
@@ -188,7 +188,7 @@ def test_build_payload_formats_status_as_readable_markdown() -> None:
             "玩家：\n"
             "- 小明：5 百万美元，在场"
         ),
-        buttons=[ButtonSpec("mod_1", "状态", "百万美金 状态")],
+        buttons=[ButtonSpec("mod_1", "状态", "百万美金状态")],
     )
 
     payload = qqofficial.build_payload(reply)
@@ -283,7 +283,7 @@ async def test_send_reply_uses_group_api_with_passive_context(monkeypatch) -> No
     )
     reply = Reply(
         text="请选择操作",
-        buttons=[ButtonSpec("mod_1", "状态", "百万美金 状态")],
+        buttons=[ButtonSpec("mod_1", "状态", "百万美金状态")],
     )
 
     ok = await qqofficial.send_reply(event, context, reply)
@@ -340,7 +340,7 @@ async def test_send_failure_does_not_leak_secret_buttons(monkeypatch) -> None:
     reply = Reply(
         text="请选择角色",
         buttons=[
-            ButtonSpec("mod_role", "司机", "百万美金 操作 secret-token", only_for="user-a")
+            ButtonSpec("mod_role", "司机", "百万美金操作 secret-token", only_for="user-a")
         ],
     )
 
@@ -478,9 +478,9 @@ async def test_send_reply_with_reveal_cards_sends_one_image_plus_text(
 
 def test_keyboard_uses_explicit_rows() -> None:
     buttons = [
-        ButtonSpec("a", "创建", "百万美金 创建", row=0),
-        ButtonSpec("b", "加入", "百万美金 加入", row=0),
-        ButtonSpec("c", "开始", "百万美金 开始", row=1),
+        ButtonSpec("a", "创建", "百万美金创建", row=0),
+        ButtonSpec("b", "加入", "百万美金加入", row=0),
+        ButtonSpec("c", "开始", "百万美金开始", row=1),
     ]
 
     keyboard = qqofficial.build_keyboard(buttons)
@@ -492,7 +492,7 @@ def test_keyboard_uses_explicit_rows() -> None:
 
 def test_keyboard_splits_oversized_row_and_caps_rows() -> None:
     buttons = [
-        ButtonSpec(f"b{index}", f"按钮{index}", "百万美金 状态", row=index // 7)
+        ButtonSpec(f"b{index}", f"按钮{index}", "百万美金状态", row=index // 7)
         for index in range(20)
     ]
 

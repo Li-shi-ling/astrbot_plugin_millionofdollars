@@ -638,7 +638,8 @@ def menu_labels(reply: Reply) -> list[str]:
 def assert_menu_buttons_are_sane(reply: Reply) -> None:
     for button in reply.buttons:
         assert button.visited_label == button.label
-        assert button.data.startswith("百万美金 ")
+        assert button.data.startswith("百万美金")
+        assert not button.data.startswith("百万美金 ")
         assert button.button_id.startswith("menu_")
 
 
@@ -825,7 +826,7 @@ async def test_transfer_target_buttons_are_private_short_and_routable(
     target = reply.buttons[0]
     assert target.only_for == "a"
     assert target.label == "2.这是一个很长"
-    assert target.data == "百万美金 转账 b"
+    assert target.data == "百万美金转账 b"
 
 
 async def test_role_selection_menu_can_refresh_only_own_buttons(
@@ -964,7 +965,7 @@ async def test_leave_room_is_lobby_only(service: GameService) -> None:
     reply = await service.leave_room(ctx("a", "leave-too-late"))
 
     assert "对局已经开始" in reply.text
-    assert "百万美金 退出" in reply.text
+    assert "百万美金退出" in reply.text
 
 
 async def test_close_room_requires_leader_or_admin(service: GameService) -> None:

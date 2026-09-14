@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import ast
 import importlib.util
 import re
 from pathlib import Path
@@ -36,6 +37,13 @@ def main_module():
     [
         ("百万美金", ("", "")),
         ("/百万美金", ("", "")),
+        ("百万美金创建", ("创建", "")),
+        ("百万美金开始", ("开始", "")),
+        ("百万美金状态", ("状态", "")),
+        ("百万美金帮助", ("帮助", "")),
+        ("百万美金转账 user-b", ("转账", "user-b")),
+        ("百万美金操作 abcdef", ("操作", "abcdef")),
+        # 旧的空格写法继续由解析层兼容，但不再作为公开命令注册或按钮数据。
         ("百万美金 创建", ("创建", "")),
         ("/百万美金 创建", ("创建", "")),
         ("百万美金创建", ("创建", "")),
@@ -122,7 +130,7 @@ def test_help_command_returns_the_rules_card_image(main_module, monkeypatch, tmp
         message_id="m-help",
     )
 
-    reply = asyncio.run(plugin._dispatch("百万美金 帮助", request))
+    reply = asyncio.run(plugin._dispatch("百万美金帮助", request))
 
     assert "规则速览" in reply.text
     assert reply.images == ["docs/sources/rule-cards/rule-card.jpg"]
@@ -152,11 +160,11 @@ def test_plugin_can_start_a_game_with_the_verified_deck(
         )
 
     async def play() -> tuple:
-        created = await plugin._dispatch("百万美金 创建", request("a", "m1"))
+        created = await plugin._dispatch("百万美金创建", request("a", "m1"))
         for index, member in enumerate(["b", "c", "d"], start=1):
-            await plugin._dispatch("百万美金 加入", request(member, f"m-join-{index}"))
-        started = await plugin._dispatch("百万美金 开始", request("a", "m-start"))
-        status = await plugin._dispatch("百万美金 状态", request("a", "m-status"))
+            await plugin._dispatch("百万美金加入", request(member, f"m-join-{index}"))
+        started = await plugin._dispatch("百万美金开始", request("a", "m-start"))
+        status = await plugin._dispatch("百万美金状态", request("a", "m-status"))
         return created, started, status
 
     created, started, status = asyncio.run(play())
@@ -168,21 +176,33 @@ def test_plugin_can_start_a_game_with_the_verified_deck(
     assert re.search(r"赃物：(8|9|10|12) 百万美元", status.text)
 
 
-def test_command_aliases_cover_no_space_writes(main_module) -> None:
-    """无空格写法也要注册成别名，否则会漏进默认 LLM 链路。"""
-    for name in (
-        "创建",
-        "加入",
-        "退出房间",
-        "关闭",
-        "状态",
-        "菜单",
-        "选角",
-        "帮助",
-        "操作",
-    ):
-        assert f"百万美金{name}" in main_module.COMMAND_ALIASES
-    assert main_module.COMMAND_NAME not in main_module.COMMAND_ALIASES
+def test_every_public_action_is_registered_as_a_complete_command(main_module) -> None:
+    """像轮盘插件一样逐条注册完整命令，而不是依赖父命令解析子指令。"""
+    tree = ast.parse((PLUGIN_ROOT / "main.py").read_text(encoding="utf-8"))
+    registered = {
+        decorator.args[0].value
+        for node in ast.walk(tree)
+        if isinstance(node, (ast.AsyncFunctionDef, ast.FunctionDef))
+        for decorator in node.decorator_list
+        if (
+            isinstance(decorator, ast.Call)
+            and isinstance(decorator.func, ast.Attribute)
+            and decorator.func.attr == "command"
+            and decorator.args
+            and isinstance(decorator.args[0], ast.Constant)
+            and isinstance(decorator.args[0].value, str)
+        )
+    }
+    assert registered == set(main_module.REGISTERED_COMMANDS)
+    assert {
+        "百万美金菜单",
+        "百万美金创建",
+        "百万美金加入",
+        "百万美金开始",
+        "百万美金状态",
+        "百万美金转账",
+        "百万美金操作",
+    } <= registered
 
 
 def _make_qqofficial_event(
@@ -245,11 +265,11 @@ def _make_qqofficial_event(
     return event_type()
 
 
-def _run_handler(main_module, plugin, event) -> None:
+def _run_handler(main_module, plugin, event, handler_name="million_dollars") -> None:
     import asyncio
 
     async def run() -> None:
-        async for _ in plugin.million_dollars(event):
+        async for _ in getattr(plugin, handler_name)(event):
             pass
 
     asyncio.run(run())
@@ -275,13 +295,13 @@ def test_handler_stops_event_so_text_commands_never_reach_llm(
     event = _make_qqofficial_event(
         main_module,
         monkeypatch,
-        message="百万美金 创建",
+        message="百万美金创建",
         posted=posted,
         sent=sent,
         flags=flags,
     )
 
-    _run_handler(main_module, plugin, event)
+    _run_handler(main_module, plugin, event, "million_dollars_create")
 
     assert posted and "已创建房间" in posted[0]["content"]
     assert flags["stopped"] is True
@@ -312,7 +332,7 @@ def test_handler_handles_no_space_alias(
         flags=flags,
     )
 
-    _run_handler(main_module, plugin, event)
+    _run_handler(main_module, plugin, event, "million_dollars_create")
 
     assert posted and "已创建房间" in posted[0]["content"]
     assert flags["stopped"] is True
@@ -336,27 +356,27 @@ def test_handler_admin_can_close_room(
     create_event = _make_qqofficial_event(
         main_module,
         monkeypatch,
-        message="百万美金 创建",
+        message="百万美金创建",
         message_id="msg-create",
         posted=posted,
         sent=[],
         flags=flags,
     )
-    _run_handler(main_module, plugin, create_event)
+    _run_handler(main_module, plugin, create_event, "million_dollars_create")
 
     # 换一个管理员身份发送「关闭」
     close_flags: dict = {"stopped": False, "call_llm": None}
     close_event = _make_qqofficial_event(
         main_module,
         monkeypatch,
-        message="百万美金 关闭",
+        message="百万美金关闭",
         role="admin",
         message_id="msg-close",
         posted=posted,
         sent=[],
         flags=close_flags,
     )
-    _run_handler(main_module, plugin, close_event)
+    _run_handler(main_module, plugin, close_event, "million_dollars_close")
 
     assert "房间已关闭" in posted[-1]["content"]
     assert close_flags["stopped"] is True
