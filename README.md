@@ -8,6 +8,7 @@
 
 - [完整中文规则](./docs/million-of-dollars-rules-zh.md)
 - [资料来源与版本说明](./docs/README.md)
+- [QQ 官方 Bot 开发说明](./docs/qqofficial-bot-development.md)
 - [2016 初版英文规则书 PDF](./docs/sources/millions-of-dollars-2016-rulebook-en.pdf)
 - [2024 二版英文规则书 PDF](./docs/sources/millions-of-dollars-2024-rulebook-en.pdf)
 

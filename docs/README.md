@@ -7,6 +7,7 @@
 插件开发以 **2016 年初版（3～8 人）** 为规则基线：
 
 - [完整中文规则](./million-of-dollars-rules-zh.md)
+- [QQ 官方 Bot 开发说明](./qqofficial-bot-development.md)
 - [2016 初版英文规则书 PDF](./sources/millions-of-dollars-2016-rulebook-en.pdf)
 
 另归档 [2024 二版英文规则书 PDF](./sources/millions-of-dollars-2024-rulebook-en.pdf)，仅供版本对照，不应与初版规则混用。
