@@ -22,7 +22,9 @@ QQOfficial 群聊与 C2C 开发要优先走“被动回复”路径。用户先�
 }
 ```
 
-开发时不要把真实 QQ 号、房间密钥、身份信息或结算结果直接放进 `action.data`。`action.data` 对用户可见，尤其 `action.type = 2` 会把它插入输入框。
+开发时不要把真实 QQ 号、房间密钥、选角参数或结算结果直接放进 `action.data`。`action.data` 会下发到客户端，尤其 `action.type = 2` 会把它插入输入框。
+
+普通秘密动作必须只放不透明 HMAC 令牌。威胁牌采用经产品确认的特殊方案：目标身份直接写入仅持牌人可用的按钮，让其在输入框查看且不发送。该例外只依赖 QQ 客户端权限，不具备密码学保密性，详见[游戏开发实现设计](./game-implementation-design.md#7-威胁牌的特殊按钮)。
 
 ## AstrBot 事件判断
 
@@ -188,6 +190,24 @@ def extract_qqofficial_user_openid(event) -> str:
 
 注意：`specify_user_ids` 的实际客户端表现需要实测。插件仍应在收到指令后再次校验发送者 openid，不能只依赖按钮客户端限制。
 
+### 秘密动作令牌
+
+选角、告密人指定、退出、转账确认等会改变服务端状态的按钮，统一使用：
+
+```text
+百万美金操作 <HMAC令牌>
+```
+
+令牌绑定游戏 UUID、群、回合、阶段、玩家 `action_generation`、动作参数和每按钮独立的 128 位随机 nonce。服务端不能从令牌反解动作，而是按真实发送者和当前状态枚举合法动作，用 `hmac.compare_digest` 匹配。详细协议见[游戏开发实现设计](./game-implementation-design.md#6-hmac-动作协议)。
+
+秘密按钮的 `visited_label` 固定为“已提交”，不得显示已选角色。
+
+### 威胁牌按钮例外
+
+威胁牌不经过 C2C，也不使用 HMAC 查询回包。插件发送一组 `permission.type = 0`、`specify_user_ids` 仅包含持牌人的 type=2 按钮；每个按钮的 `action.data` 直接写入对应目标身份，并设置 `enter = false`。玩家点击查看输入框内容后不得发送。
+
+这只能阻止普通客户端中的其他成员点击，不能防止抓包、改造客户端、平台侧记录、截图或持牌人主动发送。QQ API 确认整组按钮发送成功后才消耗威胁牌，发送失败不得扣牌。
+
 ## 回调按钮
 
 `action.type = 1` 是回调按钮。点击后平台应投递 `INTERACTION_CREATE`，插件必须尽快 ACK，否则客户端会一直加载直到请求超时。
@@ -247,7 +267,7 @@ def build_command_button(button_id: str, label: str, data: str, *, permission=No
         "id": button_id,
         "render_data": {
             "label": label,
-            "visited_label": label,
+            "visited_label": "已提交",
             "style": 1,
         },
         "action": {
@@ -261,17 +281,17 @@ def build_command_button(button_id: str, label: str, data: str, *, permission=No
     }
 ```
 
-房间、回合、投票、结算等功能都应复用这个 helper。
+房间、回合、选角、结算等功能都应复用这个 helper。威胁牌明文查看按钮应使用单独且命名明确的构造函数，避免其他秘密动作误用明文 data。
 
 ## 持续开发流程
 
 1. 先实现纯文本指令，例如 `百万美金创建`、`百万美金加入`、`百万美金状态`。
 2. 再为高频文本指令补 `action.type = 2` 指令按钮。
-3. 每个按钮的 `action.data` 必须等价于一条可手动输入的文本指令。
+3. 每个普通按钮的 `action.data` 必须等价于一条可手动输入的文本指令；秘密状态动作只使用 HMAC 指令。
 4. 所有按钮触发后的业务逻辑都要在服务端按 openid 校验权限。
 5. 群状态使用 `group_openid` 隔离，不要使用真实 QQ 群号作为数据键。
 6. 用户状态使用 `member_openid` / `user_openid`，不要假设能拿到真实 QQ 号。
-7. 发按钮失败时回退纯文本菜单，确保官方 Bot 客户端兼容性。
+7. 公开按钮失败时回退纯文本菜单；秘密选角不得回退为明文角色指令。
 8. 新增按钮或命令后补 pytest，至少覆盖 payload 结构、权限字段和命令解析。
 9. 每次修改后更新 `README.md`、`CHANGELOG.md`、`metadata.yaml`，运行测试并打包。
 

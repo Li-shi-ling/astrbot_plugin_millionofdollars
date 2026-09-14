@@ -56,3 +56,38 @@ def test_chinese_rulebook_covers_the_complete_2016_structure() -> None:
     assert "2000 万美元" in content
     assert "第 8 轮" in content
     assert "2024 二版改为 5 轮、5000 万美元获胜" in content
+
+
+def test_implementation_design_records_the_frozen_qq_flow() -> None:
+    content = (DOCS_DIR / "game-implementation-design.md").read_text(
+        encoding="utf-8"
+    )
+
+    required_sections = (
+        "## 3. 模块边界",
+        "## 5. 状态机",
+        "### 5.3 QQ 群谈判",
+        "## 6. HMAC 动作协议",
+        "## 7. 威胁牌的特殊按钮",
+        "## 8. 持久化与事务",
+        "## 11. 测试验收矩阵",
+    )
+    for section in required_sections:
+        assert section in content
+
+    assert "转账不会导致退出，退出不会附带转账" in content
+    assert "插件不提供报价对象、报价金额、接受或拒绝状态" in content
+    assert "action.data" in content
+    assert "不具备 HMAC 选角按钮的服务端密码学保密" in content
+    assert "不使用 C2C" in content
+
+
+def test_qqofficial_guide_links_to_the_game_design_and_marks_threat_exception() -> None:
+    content = (DOCS_DIR / "qqofficial-bot-development.md").read_text(
+        encoding="utf-8"
+    )
+
+    assert "./game-implementation-design.md" in content
+    assert "秘密动作令牌" in content
+    assert "威胁牌按钮例外" in content
+    assert 'visited_label": "已提交"' in content
