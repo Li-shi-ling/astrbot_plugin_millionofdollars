@@ -52,6 +52,7 @@ _KNOWN_SUBCOMMANDS = (
     "威胁牌",
     "规则卡",
     "规则",
+    "选角",
     "创建",
     "加入",
     "开始",
@@ -87,13 +88,14 @@ COMMAND_ALIASES = {
         "帮助",
         "规则",
         "规则卡",
+        "选角",
         "操作",
     )
 }
 """无空格写法（如 ``百万美金创建``）也注册成别名，避免漏进默认 LLM 链路。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.2")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.3")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -180,6 +182,8 @@ class MillionsOfDollarsPlugin(Star):
             return await service.menu(request)
         if subcommand in {"帮助", "规则", "规则卡", "help"}:
             return await service.help(request)
+        if subcommand == "选角":
+            return await service.role_menu(request)
         if subcommand == "创建":
             return await service.create(request)
         if subcommand == "加入":

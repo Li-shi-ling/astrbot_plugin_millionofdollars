@@ -50,6 +50,8 @@ def main_module():
         ("百万美金 规则", ("规则", "")),
         ("百万美金规则卡", ("规则卡", "")),
         ("百万美金 菜单", ("菜单", "")),
+        ("百万美金 选角", ("选角", "")),
+        ("百万美金选角", ("选角", "")),
         ("百万美金 加入", ("加入", "")),
         ("百万美金 准备", ("准备", "")),
         ("百万美金 取消准备", ("取消准备", "")),
@@ -168,7 +170,17 @@ def test_plugin_can_start_a_game_with_the_verified_deck(
 
 def test_command_aliases_cover_no_space_writes(main_module) -> None:
     """无空格写法也要注册成别名，否则会漏进默认 LLM 链路。"""
-    for name in ("创建", "加入", "退出房间", "关闭", "状态", "菜单", "帮助", "操作"):
+    for name in (
+        "创建",
+        "加入",
+        "退出房间",
+        "关闭",
+        "状态",
+        "菜单",
+        "选角",
+        "帮助",
+        "操作",
+    ):
         assert f"百万美金{name}" in main_module.COMMAND_ALIASES
     assert main_module.COMMAND_NAME not in main_module.COMMAND_ALIASES
 

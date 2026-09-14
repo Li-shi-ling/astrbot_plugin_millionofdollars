@@ -43,13 +43,29 @@ MENU_COMMAND_NAMES: dict[str, str] = {
     "menu_join": "加入",
     "menu_leave_room": "退出房间",
     "menu_start": "开始",
+    "menu_roles": "选角",
     "menu_status": "状态",
     "menu_transfer": "转账",
     "menu_leave": "退出",
     "menu_ready": "准备",
     "menu_unready": "取消准备",
     "menu_threat": "使用威胁牌",
+    "menu_force": "强制抢劫",
+    "menu_close": "关闭房间",
     "menu_help": "帮助",
+}
+
+REQUESTER_ONLY_MENU_IDS = {
+    "menu_leave_room",
+    "menu_start",
+    "menu_roles",
+    "menu_transfer",
+    "menu_leave",
+    "menu_ready",
+    "menu_unready",
+    "menu_threat",
+    "menu_force",
+    "menu_close",
 }
 
 
@@ -195,7 +211,11 @@ class GameService:
                 )
                 reply = Reply(
                     text=_menu_text(snapshot, ctx),
-                    buttons=_menu_buttons(snapshot, ctx),
+                    buttons=_menu_buttons(
+                        snapshot,
+                        ctx,
+                        force_rob_available=self._force_rob_available(snapshot, ctx),
+                    ),
                 )
                 return self._store(conn, ctx, reply)
 
@@ -322,6 +342,31 @@ class GameService:
         if not images:
             text += "\n\n（规则卡图片缺失，请联系管理员检查插件文件。）"
         return Reply(text=text, images=images)
+
+    async def role_menu(self, ctx: RequestContext) -> Reply:
+        """重新生成当前玩家的选角按钮，并只失效该玩家的旧按钮。"""
+        async with self._lock_for(ctx.platform_id, ctx.group_openid):
+            with self._repo.transaction() as conn:
+                replay = self._replay(conn, ctx)
+                if replay is not None:
+                    return replay
+                snapshot = self._require_game(conn, ctx)
+                player = snapshot.player(ctx.member_openid)
+                if player is None:
+                    return self._store(conn, ctx, Reply("你还没有加入本局。"))
+                if snapshot.phase is not Phase.ROLE_SELECTION:
+                    return self._store(conn, ctx, Reply("当前不是选角阶段。"))
+                if all(slot.role is not None for slot in player.slots):
+                    return self._store(conn, ctx, Reply("你已经完成选角，请等待其他玩家。"))
+
+                self._bump(snapshot, player)
+                replies = self._role_selection_replies(snapshot, only=player)
+                if not replies:
+                    return self._store(conn, ctx, Reply("当前没有可选择的角色。"))
+                self._repo.store_snapshot(conn, snapshot)
+                reply = replies[0]
+                reply.text = f"已重新生成你的选角按钮。\n{reply.text}"
+                return self._store(conn, ctx, reply)
 
     async def leave_room(self, ctx: RequestContext) -> Reply:
         """大厅阶段退出房间。
@@ -460,18 +505,22 @@ class GameService:
                 if player.cash <= 0:
                     return self._store(conn, ctx, Reply("你没有可转账的现金。"))
 
-                buttons = [
-                    ButtonSpec(
-                        button_id=f"transfer_target_{index}",
-                        label=target.display_name,
-                        data=f"百万美金转账目标 {target.member_openid}",
-                        visited_label="已选择",
+                buttons = []
+                for number, target in enumerate(snapshot.players, start=1):
+                    if target.member_openid == ctx.member_openid:
+                        continue
+                    buttons.append(
+                        ButtonSpec(
+                            button_id=f"transfer_target_{number}",
+                            label=f"{number}.{_short_display_name(target.display_name)}",
+                            data=f"{MENU_COMMAND_PREFIX}转账 {target.member_openid}",
+                            visited_label="已选择",
+                            only_for=player.member_openid,
+                        )
                     )
-                    for index, target in enumerate(snapshot.players)
-                    if target.member_openid != ctx.member_openid
-                ]
                 if not buttons:
                     return self._store(conn, ctx, Reply("房间里没有其他玩家。"))
+                buttons.append(_back_to_menu_button(player))
                 return self._store(
                     conn,
                     ctx,
@@ -519,6 +568,7 @@ class GameService:
                             only_for=player.member_openid,
                         )
                     )
+                buttons.append(_back_to_menu_button(player))
                 return self._store(
                     conn,
                     ctx,
@@ -560,7 +610,8 @@ class GameService:
                                     label="退出本轮",
                                     data=f"{ACTION_COMMAND_PREFIX}{token}",
                                     only_for=player.member_openid,
-                                )
+                                ),
+                                _back_to_menu_button(player),
                             ],
                         ),
                     )
@@ -577,6 +628,7 @@ class GameService:
                     )
                     for index, slot in enumerate(active)
                 ]
+                buttons.append(_back_to_menu_button(player))
                 return self._store(
                     conn,
                     ctx,
@@ -667,9 +719,10 @@ class GameService:
                     return self._store(conn, ctx, Reply("你没有威胁牌。"))
 
                 targets = [
-                    (holder, slot)
+                    (holder, slot_number, slot)
                     for holder in snapshot.players
-                    for slot in holder.slots
+                    if holder.member_openid != player.member_openid
+                    for slot_number, slot in enumerate(holder.slots, start=1)
                     if slot.active
                 ]
                 if not targets:
@@ -677,10 +730,10 @@ class GameService:
 
                 multiple = rules.slots_per_player(len(snapshot.players)) > 1
                 buttons = []
-                for index, (holder, slot) in enumerate(targets):
-                    label = holder.display_name
+                for index, (holder, slot_number, slot) in enumerate(targets):
+                    label = _short_display_name(holder.display_name)
                     if multiple:
-                        label = f"{label}·人物 {index + 1}"
+                        label = f"{label}·人物 {slot_number}"
                     buttons.append(
                         ButtonSpec(
                             button_id=f"threat_view_{index}",
@@ -690,6 +743,7 @@ class GameService:
                             only_for=player.member_openid,
                         )
                     )
+                buttons.append(_back_to_menu_button(player))
                 return self._store(
                     conn,
                     ctx,
@@ -907,6 +961,20 @@ class GameService:
     def _bump(self, snapshot: GameSnapshot, player: Player) -> None:
         player.action_generation += 1
 
+    def _force_rob_available(
+        self,
+        snapshot: GameSnapshot | None,
+        ctx: RequestContext,
+    ) -> bool:
+        if snapshot is None or snapshot.phase is not Phase.NEGOTIATION:
+            return False
+        leader = snapshot.leader
+        return bool(
+            leader is not None
+            and leader.member_openid == ctx.member_openid
+            and self._now() - snapshot.negotiation_started_at >= self._force_rob_delay
+        )
+
     def _post_resolution_replies(self, snapshot: GameSnapshot) -> list[Reply]:
         extra: list[Reply] = []
         if snapshot.phase is Phase.SNITCH_SELECTION:
@@ -1069,12 +1137,20 @@ def _lobby_buttons(snapshot: GameSnapshot) -> list[ButtonSpec]:
     return buttons
 
 
-def _menu_button(button_id: str, label: str, data: str, row: int) -> ButtonSpec:
+def _menu_button(
+    button_id: str,
+    label: str,
+    data: str,
+    row: int,
+    *,
+    only_for: str | None = None,
+) -> ButtonSpec:
     return ButtonSpec(
         button_id=button_id,
         label=label,
         data=data,
         visited_label=label,
+        only_for=only_for,
         row=row,
     )
 
@@ -1082,6 +1158,8 @@ def _menu_button(button_id: str, label: str, data: str, row: int) -> ButtonSpec:
 def _menu_buttons(
     snapshot: GameSnapshot | None,
     ctx: RequestContext,
+    *,
+    force_rob_available: bool = False,
 ) -> list[ButtonSpec]:
     """按当前局面生成菜单按钮：只给这个人现在用得上的操作。"""
     rows: list[list[tuple[str, str]]] = []
@@ -1090,10 +1168,12 @@ def _menu_buttons(
     if snapshot is None or snapshot.phase is Phase.GAME_OVER:
         rows.append([("menu_create", "创建房间"), help_row])
     elif snapshot.phase is Phase.LOBBY:
+        player = snapshot.player(ctx.member_openid)
         row: list[tuple[str, str]] = []
-        if len(snapshot.players) < MAX_PLAYERS:
+        if player is None and len(snapshot.players) < MAX_PLAYERS:
             row.append(("menu_join", "加入"))
-        row.append(("menu_leave_room", "退出房间"))
+        if player is not None:
+            row.append(("menu_leave_room", "退出房间"))
         leader = snapshot.leader
         if (
             leader is not None
@@ -1103,8 +1183,23 @@ def _menu_buttons(
             row.append(("menu_start", "开始游戏"))
         rows.append(row)
         rows.append([("menu_status", "查看状态"), help_row])
+        if ctx.is_admin or (
+            leader is not None and leader.member_openid == ctx.member_openid
+        ):
+            rows.append([("menu_close", "关闭房间")])
     elif snapshot.phase is Phase.ROLE_SELECTION:
-        rows.append([("menu_status", "查看状态"), help_row])
+        player = snapshot.player(ctx.member_openid)
+        row = []
+        if player is not None and any(slot.role is None for slot in player.slots):
+            row.append(("menu_roles", "重新获取选角"))
+        row.append(("menu_status", "查看状态"))
+        rows.append(row)
+        rows.append([help_row])
+        leader = snapshot.leader
+        if ctx.is_admin or (
+            leader is not None and leader.member_openid == ctx.member_openid
+        ):
+            rows[-1].append(("menu_close", "关闭房间"))
     elif snapshot.phase is Phase.NEGOTIATION:
         player = snapshot.player(ctx.member_openid)
         row = []
@@ -1117,9 +1212,16 @@ def _menu_buttons(
             )
             if player.threat_cards > 0:
                 row.append(("menu_threat", "使用威胁牌"))
+            if force_rob_available:
+                row.append(("menu_force", "强制抢劫"))
         if row:
             rows.append(row)
         rows.append([("menu_status", "查看状态"), help_row])
+        leader = snapshot.leader
+        if ctx.is_admin or (
+            leader is not None and leader.member_openid == ctx.member_openid
+        ):
+            rows.append([("menu_close", "关闭房间")])
     else:
         rows.append([("menu_status", "查看状态"), help_row])
 
@@ -1127,8 +1229,19 @@ def _menu_buttons(
     for row_index, row in enumerate(rows):
         for button_id, label in row:
             name = MENU_COMMAND_NAMES[button_id]
+            only_for = (
+                ctx.member_openid
+                if button_id in REQUESTER_ONLY_MENU_IDS
+                else None
+            )
             buttons.append(
-                _menu_button(button_id, label, f"{MENU_COMMAND_PREFIX}{name}", row_index)
+                _menu_button(
+                    button_id,
+                    label,
+                    f"{MENU_COMMAND_PREFIX}{name}",
+                    row_index,
+                    only_for=only_for,
+                )
             )
     return buttons
 
@@ -1309,6 +1422,23 @@ def _public_button(button_id: str, label: str, data: str) -> ButtonSpec:
         data=data,
         visited_label="已提交",
     )
+
+
+def _back_to_menu_button(player: Player) -> ButtonSpec:
+    return ButtonSpec(
+        button_id="back_to_menu",
+        label="返回菜单",
+        data=f"{MENU_COMMAND_PREFIX}菜单",
+        visited_label="返回菜单",
+        only_for=player.member_openid,
+    )
+
+
+def _short_display_name(name: str, max_len: int = 6) -> str:
+    cleaned = str(name or "").strip() or "玩家"
+    if len(cleaned) <= max_len:
+        return cleaned
+    return cleaned[:max_len]
 
 
 def _threat_card_data(slot: CharacterSlot, holder: Player) -> str:

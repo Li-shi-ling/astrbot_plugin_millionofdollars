@@ -179,6 +179,26 @@ def test_build_payload_uses_markdown_when_buttons_exist() -> None:
     assert payload["keyboard"]["content"]["rows"][0]["buttons"][0]["id"] == "mod_1"
 
 
+def test_build_payload_formats_status_as_readable_markdown() -> None:
+    reply = Reply(
+        text=(
+            "人数：4/8\n"
+            "阶段：谈判\n"
+            "首领：小明\n"
+            "玩家：\n"
+            "- 小明：5 百万美元，在场"
+        ),
+        buttons=[ButtonSpec("mod_1", "状态", "百万美金 状态")],
+    )
+
+    payload = qqofficial.build_payload(reply)
+
+    markdown = payload["markdown"]["content"]
+    assert "**阶段**：谈判" in markdown
+    assert "### 玩家" in markdown
+    assert payload["content"] == reply.text
+
+
 def test_build_payload_falls_back_to_plain_text() -> None:
     payload = qqofficial.build_payload(Reply(text="纯文本"))
 
@@ -290,6 +310,7 @@ async def test_send_reply_sends_extra_messages(monkeypatch) -> None:
         member_openid="user-a",
         display_name="小明",
         message_id="msg-1",
+        msg_seq=1,
     )
     reply = Reply(
         text="公开信息",
@@ -300,6 +321,7 @@ async def test_send_reply_sends_extra_messages(monkeypatch) -> None:
 
     assert ok is True
     assert [item["content"] for item in calls] == ["公开信息", "你的秘密按钮"]
+    assert [item["msg_seq"] for item in calls] == [1, 2]
     assert calls[1]["keyboard"]["content"]["rows"][0]["buttons"][0]["action"]["type"] == 2
 
 

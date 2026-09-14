@@ -256,7 +256,12 @@ async def test_transfer_moves_money_without_leaving(service: GameService) -> Non
     )
 
     menu = await service.transfer_menu(ctx("a", "t-menu"))
-    assert {button.label for button in menu.buttons} == {"b", "c", "d"}
+    target_buttons = [
+        button for button in menu.buttons if button.button_id.startswith("transfer_target_")
+    ]
+    assert [button.label for button in target_buttons] == ["2.b", "3.c", "4.d"]
+    assert all(button.only_for == "a" for button in target_buttons)
+    assert menu.buttons[-1].label == "返回菜单"
 
     amounts = await service.transfer_amounts(ctx("a", "t-amounts"), "b")
     button = next(item for item in amounts.buttons if item.label == "2 百万")
@@ -346,11 +351,15 @@ async def test_threat_card_buttons_are_private_and_plaintext(
 
     reply = await service.threat_card_menu(ctx("a", "threat"))
 
-    assert reply.buttons
-    for button in reply.buttons:
+    view_buttons = [
+        button for button in reply.buttons if button.button_id.startswith("threat_view_")
+    ]
+    assert len(view_buttons) == 3
+    for button in view_buttons:
         assert button.only_for == "a"
         assert button.data.startswith("查看结果：")
         assert button.visited_label == "已查看"
+    assert reply.buttons[-1].label == "返回菜单"
 
 
 async def test_action_token_requires_current_phase(service: GameService) -> None:
@@ -628,7 +637,6 @@ def menu_labels(reply: Reply) -> list[str]:
 
 def assert_menu_buttons_are_sane(reply: Reply) -> None:
     for button in reply.buttons:
-        assert button.only_for is None
         assert button.visited_label == button.label
         assert button.data.startswith("百万美金 ")
         assert button.button_id.startswith("menu_")
@@ -652,14 +660,23 @@ async def test_menu_in_lobby_matches_the_current_state(
 
     # 首领但人不够：不给「开始游戏」
     leader_reply = await service.menu(ctx("a", "menu-lobby-leader"))
-    assert menu_labels(leader_reply) == ["加入", "退出房间", "查看状态", "帮助（规则卡）"]
+    assert menu_labels(leader_reply) == [
+        "退出房间",
+        "查看状态",
+        "帮助（规则卡）",
+        "关闭房间",
+    ]
     assert "大厅" in leader_reply.text
 
-    # 非首领同样看不到「开始游戏」
+    # 已加入的非首领看不到「加入 / 开始 / 关闭」
     other_reply = await service.menu(ctx("b", "menu-lobby-other"))
-    assert "开始游戏" not in menu_labels(other_reply)
+    assert menu_labels(other_reply) == ["退出房间", "查看状态", "帮助（规则卡）"]
 
-    # 人满了又没满员：首领可以看到「开始游戏」
+    # 未加入者只看到加入和只读入口
+    outsider_reply = await service.menu(ctx("z", "menu-lobby-outsider"))
+    assert menu_labels(outsider_reply) == ["加入", "查看状态", "帮助（规则卡）"]
+
+    # 人数达到下限后，只有首领可以看到「开始游戏」
     await service.join(ctx("c", "menu-lobby-join-c"))
     started_ready = await service.menu(ctx("a", "menu-lobby-3"))
     assert "开始游戏" in menu_labels(started_ready)
@@ -680,7 +697,14 @@ async def test_menu_in_negotiation_only_offers_negotiation_actions(
     # 谈判阶段不该出现房间/开局相关按钮
     for bad in ["创建房间", "加入", "退出房间", "开始游戏"]:
         assert bad not in labels
-    assert labels == ["转账", "退出本轮", "准备", "查看状态", "帮助（规则卡）"]
+    assert labels == [
+        "转账",
+        "退出本轮",
+        "准备",
+        "查看状态",
+        "帮助（规则卡）",
+        "关闭房间",
+    ]
     assert "谈判中" in reply.text
     assert_menu_buttons_are_sane(reply)
 
@@ -712,7 +736,7 @@ async def test_menu_ready_button_flips_and_threat_is_conditional(
     assert "使用威胁牌" in menu_labels(with_card)
 
 
-async def test_menu_after_leaving_round_has_no_action_buttons(
+async def test_menu_after_leaving_round_has_no_round_action_buttons(
     service: GameService,
 ) -> None:
     await enter_negotiation(
@@ -724,7 +748,7 @@ async def test_menu_after_leaving_round_has_no_action_buttons(
 
     reply = await service.menu(ctx("a", "menu-after-leave"))
 
-    assert menu_labels(reply) == ["查看状态", "帮助（规则卡）"]
+    assert menu_labels(reply) == ["查看状态", "帮助（规则卡）", "关闭房间"]
 
 
 async def test_menu_after_game_over_offers_new_room(service: GameService) -> None:
@@ -768,7 +792,83 @@ async def test_transfer_amount_buttons_are_limited(
     reply = await service.transfer_amounts(ctx("a", "amount-many"), "b")
 
     labels = [button.label for button in reply.buttons]
-    assert labels == ["1 百万", "2 百万", "3 百万", "5 百万", "20 百万（全部）"]
+    assert labels == [
+        "1 百万",
+        "2 百万",
+        "3 百万",
+        "5 百万",
+        "20 百万（全部）",
+        "返回菜单",
+    ]
+
+
+async def test_transfer_target_buttons_are_private_short_and_routable(
+    service: GameService,
+) -> None:
+    await enter_negotiation(
+        service,
+        {
+            "a": "driver",
+            "b": "brute",
+            "c": "crook",
+            "d": "driver",
+        },
+    )
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    snapshot.players[1].display_name = "这是一个很长的玩家名字"
+    service._repo.save(snapshot)
+
+    reply = await service.transfer_menu(ctx("a", "target-menu"))
+
+    assert reply.buttons[-1].label == "返回菜单"
+    target = reply.buttons[0]
+    assert target.only_for == "a"
+    assert target.label == "2.这是一个很长"
+    assert target.data == "百万美金 转账 b"
+
+
+async def test_role_selection_menu_can_refresh_only_own_buttons(
+    service: GameService,
+) -> None:
+    started = await start_game(service, ["a", "b", "c", "d"])
+    old = button_token(selection_message(started, "a").buttons[0])
+
+    menu = await service.menu(ctx("a", "role-menu"))
+    assert menu_labels(menu) == [
+        "重新获取选角",
+        "查看状态",
+        "帮助（规则卡）",
+        "关闭房间",
+    ]
+    assert menu.buttons[0].only_for == "a"
+
+    refreshed = await service.role_menu(ctx("a", "role-refresh"))
+    assert refreshed.buttons
+    assert all(button.only_for == "a" for button in refreshed.buttons)
+    assert "已重新生成" in refreshed.text
+
+    expired = await service.handle_token(ctx("a", "role-old"), old)
+    assert "失效" in expired.text
+
+
+async def test_force_rob_button_appears_only_for_leader_after_timeout(
+    service: GameService,
+    clock: Clock,
+) -> None:
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+
+    assert "强制抢劫" not in menu_labels(await service.menu(ctx("a", "force-early")))
+    clock.value += 61
+    leader_menu = await service.menu(ctx("a", "force-late"))
+    force_button = next(
+        button for button in leader_menu.buttons if button.label == "强制抢劫"
+    )
+    assert force_button.only_for == "a"
+    assert "强制抢劫" not in menu_labels(await service.menu(ctx("b", "force-other")))
 
 
 # ----------------------------------------------------------------------

@@ -171,9 +171,43 @@ def build_payload(reply: Reply) -> dict[str, Any]:
     return {
         "content": reply.text,
         "msg_type": 2,
-        "markdown": {"content": reply.text},
+        "markdown": {"content": format_markdown(reply.text)},
         "keyboard": keyboard,
     }
+
+
+def format_markdown(text: str) -> str:
+    """把状态和事件文本整理成 QQ Markdown，同时保留已有 Markdown。"""
+    formatted: list[str] = []
+    bold_fields = (
+        "人数",
+        "阶段",
+        "回合",
+        "首领",
+        "赃物",
+        "公开角色",
+    )
+    for line in str(text or "").splitlines():
+        stripped = line.strip()
+        if not stripped:
+            formatted.append("")
+            continue
+        if stripped == "玩家：":
+            formatted.append("### 玩家")
+            continue
+        if stripped.startswith(("#", "- ", "> ", "**", "```")):
+            formatted.append(line)
+            continue
+        matched = False
+        for field in bold_fields:
+            prefix = f"{field}："
+            if stripped.startswith(prefix):
+                formatted.append(f"**{field}**：{stripped.removeprefix(prefix)}")
+                matched = True
+                break
+        if not matched:
+            formatted.append(stripped)
+    return "\n".join(formatted)
 
 
 def add_passive_reply_context(
@@ -199,8 +233,18 @@ async def send_reply(event: Any, context: QQOfficialContext, reply: Reply) -> bo
     降级为明文角色指令。图片按相对插件根目录的路径解析后逐张发送。
     """
     ok = True
-    for index, item in enumerate([reply, *reply.extra]):
-        sent = await _send_single(event, context, item, extra=index > 0)
+    items = [reply, *reply.extra]
+    base_seq = context.msg_seq
+    if base_seq is None:
+        base_seq = random.randint(1, max(1, 10_001 - len(items)))
+    for index, item in enumerate(items):
+        sent = await _send_single(
+            event,
+            context,
+            item,
+            extra=index > 0,
+            msg_seq=((base_seq - 1 + index) % 10_000) + 1,
+        )
         ok = ok and sent
     return ok
 
@@ -278,6 +322,7 @@ async def _send_single(
     reply: Reply,
     *,
     extra: bool,
+    msg_seq: int,
 ) -> bool:
     for relative_path in reply.images:
         await send_image(event, relative_path)
@@ -288,7 +333,7 @@ async def _send_single(
     add_passive_reply_context(
         payload,
         msg_id=context.message_id,
-        msg_seq=context.msg_seq,
+        msg_seq=msg_seq,
     )
     raw_message = getattr(getattr(event, "message_obj", None), "raw_message", None)
     logger.info(

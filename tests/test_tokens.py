@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+import os
+
 import pytest
 from game import loot, tokens
 from game.models import LootCard, Role
@@ -108,6 +110,10 @@ def test_secret_is_reused_across_restarts(tmp_path) -> None:
     assert second.match(token, context(), [TokenAction("ready")]) == TokenAction("ready")
 
 
+@pytest.mark.skipif(
+    os.name == "nt",
+    reason="Windows 的 st_mode 不表达 POSIX 组/其他用户权限位",
+)
 def test_secret_file_is_not_world_readable(tmp_path) -> None:
     path = tmp_path / "nested" / "hmac_secret.bin"
     TokenSigner.load_or_create(path)
