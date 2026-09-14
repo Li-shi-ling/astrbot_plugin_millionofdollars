@@ -93,7 +93,7 @@ COMMAND_ALIASES = {
 """无空格写法（如 ``百万美金创建``）也注册成别名，避免漏进默认 LLM 链路。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.0")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.1")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
