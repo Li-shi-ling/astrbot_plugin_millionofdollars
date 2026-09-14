@@ -9,9 +9,12 @@
 - [完整中文规则](./million-of-dollars-rules-zh.md)
 - [QQ 官方 Bot 开发说明](./qqofficial-bot-development.md)
 - [QQ 官方 Bot 游戏开发实现设计](./game-implementation-design.md)
+- [赃物牌组核验](./loot-deck-verification.md)
 - [2016 初版英文规则书 PDF](./sources/millions-of-dollars-2016-rulebook-en.pdf)
 
 另归档 [2024 二版英文规则书 PDF](./sources/millions-of-dollars-2024-rulebook-en.pdf)，仅供版本对照，不应与初版规则混用。
+
+《百万美金》10 张赃物牌的实物牌面截图归档在 [sources/loot-cards](./sources/loot-cards/)，核验方法与结果见[赃物牌组核验记录](./loot-deck-verification.md)。
 
 ## 来源
 

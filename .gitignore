@@ -210,3 +210,17 @@ __marimo__/
 .omx/
 tmp/
 .pipeline-workspace/
+
+# 插件本地运行产物：AstrBot 数据目录、安装包、SQLite、缓存
+data/
+dist/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+hmac_secret.bin
+
+# 牌面核验用的临时参考目录（内容已归档到 docs/sources/loot-cards/）
+参考/
+
+# SQLite session 残留文件
+*.ses
