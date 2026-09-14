@@ -209,3 +209,4 @@ __marimo__/
 # My
 .omx/
 tmp/
+.pipeline-workspace/
