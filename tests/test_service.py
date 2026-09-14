@@ -319,7 +319,13 @@ async def test_transfer_moves_money_without_leaving(service: GameService) -> Non
         button for button in menu.buttons if button.button_id.startswith("transfer_target_")
     ]
     assert [button.label for button in target_buttons] == ["2.b", "3.c", "4.d"]
-    assert all(button.only_for == "a" for button in target_buttons)
+    # 送出去的是房间序号，不是 openid；按钮本身谁都能点
+    assert [button.data for button in target_buttons] == [
+        "百万美金转账 2",
+        "百万美金转账 3",
+        "百万美金转账 4",
+    ]
+    assert all(button.only_for is None for button in target_buttons)
     assert menu.buttons[-1].label == "返回菜单"
 
     amounts = await service.transfer_amounts(ctx("a", "t-amounts"), "b")
@@ -878,7 +884,7 @@ async def test_transfer_amount_buttons_are_limited(
     ]
 
 
-async def test_transfer_target_buttons_are_private_short_and_routable(
+async def test_transfer_target_buttons_use_room_index(
     service: GameService,
 ) -> None:
     await enter_negotiation(
@@ -899,12 +905,22 @@ async def test_transfer_target_buttons_are_private_short_and_routable(
 
     assert reply.buttons[-1].label == "返回菜单"
     target = reply.buttons[0]
-    assert target.only_for == "a"
+    assert target.only_for is None
     assert target.label == "2.这是一个很长"
-    assert target.data == "百万美金转账 b"
+    assert target.data == "百万美金转账 2"
+
+    # 序号指到同一个人：拿序号和拿 openid 都要给出同一份金额按钮
+    by_index = await service.transfer_amounts(ctx("a", "target-index"), "2")
+    by_openid = await service.transfer_amounts(ctx("a", "target-openid"), "b")
+    assert [button.label for button in by_index.buttons] == [
+        button.label for button in by_openid.buttons
+    ]
+    # 越界序号给出可读提示
+    out_of_range = await service.transfer_amounts(ctx("a", "target-out"), "99")
+    assert "没有这个序号" in out_of_range.text
 
 
-async def test_role_selection_menu_can_refresh_only_own_buttons(
+async def test_role_selection_menu_can_refresh_own_buttons(
     service: GameService,
 ) -> None:
     started = await start_game(service, ["a", "b", "c", "d"])
@@ -917,7 +933,8 @@ async def test_role_selection_menu_can_refresh_only_own_buttons(
         "帮助（规则卡）",
         "关闭房间",
     ]
-    assert menu.buttons[0].only_for == "a"
+    # 菜单按钮谁都能点，点下去重发的仍是「点击者本人」的选角按钮
+    assert menu.buttons[0].only_for is None
 
     refreshed = await service.role_menu(ctx("a", "role-refresh"))
     assert refreshed.buttons
@@ -943,7 +960,10 @@ async def test_force_rob_button_appears_only_for_leader_after_timeout(
     force_button = next(
         button for button in leader_menu.buttons if button.label == "强制抢劫"
     )
-    assert force_button.only_for == "a"
+    # 按钮是公开的，能不能执行由服务端按真实身份校验
+    assert force_button.only_for is None
+    assert force_button.data == "百万美金强制抢劫"
+    # 非首领的菜单里不会出现这个按钮
     assert "强制抢劫" not in menu_labels(await service.menu(ctx("b", "force-other")))
 
 
@@ -1111,3 +1131,62 @@ async def test_player_facing_text_has_no_internal_jargon(
 
     # 阶段用中文展示
     assert "阶段：选角" in (await service.status(ctx("a", "jargon-5"))).text
+
+
+async def test_ready_progress_and_transfer_reset_notice(service: GameService) -> None:
+    """准备要显示进度；转账清空准备时必须告知玩家，否则会停在谈判阶段。"""
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+
+    first = await service.set_ready(ctx("a", "ready-progress-1"), True)
+    assert "1/4 人已准备" in first.text
+
+    await service.set_ready(ctx("b", "ready-progress-2"), True)
+    third = await service.set_ready(ctx("c", "ready-progress-3"), True)
+    assert "3/4 人已准备" in third.text
+
+    # 此时有人转账：准备状态被清空，必须明确提示
+    amounts = await service.transfer_amounts(ctx("b", "reset-amounts"), "1")
+    one = next(button for button in amounts.buttons if button.label == "1 百万")
+    transferred = await service.handle_token(ctx("b", "reset-confirm"), button_token(one))
+
+    assert "清空了准备状态" in transferred.text
+
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert all(player.ready is False for player in snapshot.players)
+
+    # 重新准备时进度从 1 开始，最后一个人触发结算
+    again = await service.set_ready(ctx("a", "ready-again-1"), True)
+    assert "1/4 人已准备" in again.text
+    await service.set_ready(ctx("b", "ready-again-2"), True)
+    await service.set_ready(ctx("c", "ready-again-3"), True)
+    final = await service.set_ready(ctx("d", "ready-again-4"), True)
+    assert "全员准备完毕" in final.text
+
+
+async def test_menu_buttons_are_clickable_by_anyone_in_negotiation(
+    service: GameService,
+) -> None:
+    """谈判菜单里的按钮不再限制点击人，谁点就按谁的身份执行。"""
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+
+    menu = await service.menu(ctx("a", "shared-menu"))
+
+    assert menu.buttons
+    assert all(button.only_for is None for button in menu.buttons)
+
+    # 换一个人点同一个菜单里的「准备」，生效的是点击的人
+    ready_button = next(button for button in menu.buttons if button.label == "准备")
+    assert ready_button.data == "百万美金准备"
+    await service.set_ready(ctx("b", "shared-menu-ready"), True)
+
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert snapshot.player("b") is not None and snapshot.player("b").ready is True
+    assert snapshot.player("a") is not None and snapshot.player("a").ready is False
