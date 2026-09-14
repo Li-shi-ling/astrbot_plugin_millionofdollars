@@ -24,6 +24,13 @@ def test_rules_card_exists() -> None:
     assert help.rules_card_path().is_file()
 
 
+def test_role_card_back_exists() -> None:
+    """角色卡卡背已归档（不是角色卡）。"""
+    back = help.resolve(help.CARD_BACK_PATH)
+    assert back.is_file()
+    assert back.name == "card-back.jpg"
+
+
 def test_shuffled_is_a_permutation_and_not_always_the_input_order() -> None:
     paths = role_paths("driver", "brute", "crook", "snitch", "mastermind")
 

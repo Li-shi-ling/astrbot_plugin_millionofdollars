@@ -46,8 +46,8 @@ ROLE_CARD_PATHS: dict[str, str] = {
 }
 """身份揭露时使用的角色卡。钥匙为 :class:`~game.models.Role` 的字符串值。"""
 
-FAMILY_CARD_PATH = "docs/sources/role-cards/06_the_munday_family.jpg"
-"""帮派家族卡，首个版本仅归档不使用。"""
+CARD_BACK_PATH = "docs/sources/role-cards/card-back.jpg"
+"""角色卡卡背（牌面印有帮派名），用于需要展示暗置卡面的场景。"""
 
 REVEAL_ORDER: tuple[Role, ...] = (
     Role.SNITCH,

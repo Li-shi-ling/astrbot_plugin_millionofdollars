@@ -2,6 +2,12 @@
 
 本项目的显著变更记录在此文件中。
 
+## v1.6.1 - 2026-09-14
+
+- 修正素材分类：`docs/sources/role-cards/06_the_munday_family.jpg` 实际是**角色卡卡背**（牌面印有帮派名），改名为 `card-back.jpg` 并在注册表中登记为 `CARD_BACK_PATH`。
+- 同步修正归档的 `docs/sources/role-cards/cards.json`（第 6 张 `type` 改为 `card_back`）。
+- 新增卡背文件存在性测试；更新 README 与 metadata 版本号到 v1.6.1。
+
 ## v1.6.0 - 2026-09-14
 
 - 新增帮助接口：`百万美金 帮助`（`规则`、`规则卡` 同义）输出规则卡图片与规则速览，图片缺失时只回复文字并提示。
