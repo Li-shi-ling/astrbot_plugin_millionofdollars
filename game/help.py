@@ -47,16 +47,10 @@ ROLE_CARD_PATHS: dict[str, str] = {
 """身份揭露时使用的角色卡。钥匙为 :class:`~game.models.Role` 的字符串值。"""
 
 CARD_BACK_PATH = "docs/sources/role-cards/card-back.jpg"
-"""角色卡卡背（牌面印有帮派名），用于需要展示暗置卡面的场景。"""
+"""角色卡卡背（牌面印有帮派名），用于展示暗置的角色卡。"""
 
-REVEAL_ORDER: tuple[Role, ...] = (
-    Role.SNITCH,
-    Role.BRUTE,
-    Role.DRIVER,
-    Role.CROOK,
-    Role.MASTERMIND,
-)
-"""身份揭露的公开顺序，与抢劫结算顺序一致。"""
+CARD_BACK_KEY = "card_back"
+"""身份揭露时代表"被隐藏的那张角色牌"的键。"""
 
 HELP_TEXT = """## 百万美金 · 规则速览
 
@@ -89,34 +83,29 @@ def rules_card_path() -> Path:
 
 
 def role_card_path(role: Role | str) -> Path | None:
+    """角色卡的绝对路径；未知角色返回 ``None``。"""
+    return card_path(role)
+
+
+def card_path(key: Role | str) -> Path | None:
+    """把角色键或卡背键解析成图片路径；未知键返回 ``None``。"""
+    if key == CARD_BACK_KEY:
+        return resolve(CARD_BACK_PATH)
     try:
-        key = Role(role)
+        role = Role(key)
     except ValueError:
         return None
-    relative = ROLE_CARD_PATHS.get(key)
+    relative = ROLE_CARD_PATHS.get(role)
     if relative is None:
         return None
     return resolve(relative)
 
 
-def _is_role(role: Role | str) -> bool:
-    try:
-        Role(role)
-    except ValueError:
-        return False
-    return True
-
-
-def reveal_roles(roles: list[Role] | tuple[Role, ...]) -> list[str]:
-    """返回身份揭露要去重展示的角色键。
-
-    返回值只保证内容与去重，**不保证顺序**：展示顺序由 QQ 适配层随机打乱，
-    避免固定顺序暗示玩家与角色的对应关系。
-    """
-    unique = {Role(role) for role in roles if _is_role(role)}
-    return [role.value for role in REVEAL_ORDER if role in unique]
-
-
-def reveal_images(roles: list[Role] | tuple[Role, ...]) -> list[str]:
-    """按角色键返回对应的角色卡相对路径（用于测试与调试）。"""
-    return [ROLE_CARD_PATHS[Role(role)] for role in reveal_roles(roles)]
+def card_paths(keys: list[Role | str] | tuple[Role | str, ...]) -> list[Path]:
+    """按给定顺序把卡片键解析成图片路径，跳过未知键。"""
+    paths: list[Path] = []
+    for key in keys:
+        path = card_path(key)
+        if path is not None:
+            paths.append(path)
+    return paths

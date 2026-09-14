@@ -373,7 +373,7 @@ async def test_send_reveal_image_shuffles_before_merging(monkeypatch, tmp_path) 
 
     monkeypatch.setattr(qqofficial, "_temp_image_path", lambda: tmp_path / "reveal.jpg")
     monkeypatch.setattr(qqofficial.cards_module, "shuffled", fake_shuffled)
-    monkeypatch.setattr(qqofficial.cards_module, "compose_strip", fake_compose)
+    monkeypatch.setattr(qqofficial.cards_module, "compose_grid", fake_compose)
 
     roles = ["driver", "brute", "crook"]
     sent: list = []
@@ -426,7 +426,7 @@ async def test_send_reply_sends_rule_card_then_text(monkeypatch) -> None:
 
 
 @pytest.mark.asyncio
-async def test_send_reply_with_reveal_roles_sends_one_image_plus_text(
+async def test_send_reply_with_reveal_cards_sends_one_image_plus_text(
     monkeypatch, tmp_path
 ) -> None:
     monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
@@ -443,7 +443,7 @@ async def test_send_reply_with_reveal_roles_sends_one_image_plus_text(
     )
     reply = Reply(
         text="抢劫结算：司机×2 全部淘汰。",
-        reveal_roles=["driver", "brute"],
+        reveal_cards=["driver", "brute"],
     )
 
     ok = await qqofficial.send_reply(event, context, reply)

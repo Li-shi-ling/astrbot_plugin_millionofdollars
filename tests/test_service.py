@@ -539,10 +539,12 @@ def service_help_path(relative: str):
     return help_module.resolve(relative)
 
 
-async def test_resolution_reply_carries_reveal_roles_and_skips_left_players(
+async def test_resolution_reply_carries_the_table_pile_with_card_back(
     service: GameService,
 ) -> None:
-    """5 人局：d（唯一告密人）谈判期退出，揭露不应包含告密人卡。"""
+    """揭露图 = 本轮中心牌堆：每个提交过角色的槽位一张，被隐藏的那张是卡背。"""
+    from collections import Counter
+
     players = ["a", "b", "c", "d", "e"]
     start_reply = await start_game(service, players)
     chosen = {
@@ -568,5 +570,53 @@ async def test_resolution_reply_carries_reveal_roles_and_skips_left_players(
         reply = await service.set_ready(ctx(member, f"reveal-ready-{member}"), True)
 
     assert reply is not None
-    assert sorted(reply.reveal_roles) == ["brute", "crook", "driver"]
-    assert "snitch" not in reply.reveal_roles
+    cards = list(reply.reveal_cards)
+    submitted = Counter(chosen.values())
+
+    # 5 个槽位各一张牌，其中恰好一张被隐藏成卡背
+    assert len(cards) == 5
+    assert cards.count("card_back") == 1
+    visible = Counter(card for card in cards if card != "card_back")
+    # 可见卡面是提交牌面的子集，且只少一张（被隐藏的那张）
+    assert sum((submitted - visible).values()) == 1
+    # 谈判期退出的玩家，其角色牌仍匿名留在中央牌堆
+    assert submitted - visible
+
+
+async def test_snitch_selection_defers_the_reveal_image(service: GameService) -> None:
+    """进入告密人指定阶段时先不发揭露图，等本轮真正结算再发。"""
+    players = ["a", "b", "c", "d", "e"]
+    start_reply = await start_game(service, players)
+    chosen = {
+        "a": "snitch",
+        "b": "driver",
+        "c": "brute",
+        "d": "crook",
+        "e": "driver",
+    }
+    labels = {"driver": "司机", "brute": "暴徒", "crook": "恶棍", "snitch": "告密人"}
+    for member in players:
+        selection = selection_message(start_reply, member)
+        index = [button.label for button in selection.buttons].index(labels[chosen[member]])
+        await service.handle_token(
+            ctx(member, f"snitch-role-{member}"), button_token(selection.buttons[index])
+        )
+
+    reply = None
+    for member in players:
+        reply = await service.set_ready(ctx(member, f"snitch-ready-{member}"), True)
+
+    assert reply is not None
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert snapshot.phase is Phase.SNITCH_SELECTION
+    assert reply.reveal_cards == []
+
+    # 告密人指定后，结算回执带上整堆卡面（含 1 张卡背）
+    snitch_reply = service._post_resolution_replies(snapshot)
+    assert snitch_reply
+    token = button_token(snitch_reply[0].buttons[0])
+    final = await service.handle_token(ctx("a", "snitch-choose"), token)
+
+    assert len(final.reveal_cards) == 5
+    assert final.reveal_cards.count("card_back") == 1

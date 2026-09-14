@@ -43,10 +43,10 @@ def test_shuffled_is_a_permutation_and_not_always_the_input_order() -> None:
     assert len(orders) > 1, "打乱后不应永远保持同一顺序"
 
 
-def test_compose_strip_merges_cards_into_one_image(tmp_path) -> None:
+def test_compose_grid_merges_cards_into_one_image(tmp_path) -> None:
     paths = role_paths("driver", "brute", "crook")
 
-    output = cards.compose_strip(paths, tmp_path / "reveal.jpg")
+    output = cards.compose_grid(paths, tmp_path / "reveal.jpg")
 
     assert output.is_file()
     image = Image.open(output)
@@ -58,24 +58,31 @@ def test_compose_strip_merges_cards_into_one_image(tmp_path) -> None:
     assert image.width >= single.width * 3
 
 
-def test_compose_strip_accepts_a_single_card(tmp_path) -> None:
-    output = cards.compose_strip(role_paths("snitch"), tmp_path / "one.jpg")
+def test_compose_grid_accepts_a_single_card(tmp_path) -> None:
+    output = cards.compose_grid(role_paths("snitch"), tmp_path / "one.jpg")
 
     assert output.is_file()
 
 
-def test_compose_strip_rejects_missing_card(tmp_path) -> None:
+def test_compose_grid_rejects_missing_card(tmp_path) -> None:
     with pytest.raises(cards.CardImageError):
-        cards.compose_strip([tmp_path / "nope.jpg"], tmp_path / "out.jpg")
+        cards.compose_grid([tmp_path / "nope.jpg"], tmp_path / "out.jpg")
 
 
-def test_compose_strip_rejects_empty_input(tmp_path) -> None:
+def test_compose_grid_rejects_empty_input(tmp_path) -> None:
     with pytest.raises(cards.CardImageError):
-        cards.compose_strip([], tmp_path / "out.jpg")
+        cards.compose_grid([], tmp_path / "out.jpg")
 
 
-def test_reveal_roles_dedupes_and_stays_within_known_roles() -> None:
-    roles = help.reveal_roles(["driver", "brute", "driver", "snitch"])
+def test_card_paths_resolve_roles_and_card_back() -> None:
+    paths = help.card_paths(["driver", help.CARD_BACK_KEY, "unknown"])
 
-    assert sorted(roles) == ["brute", "driver", "snitch"]
-    assert all(role in help.ROLE_CARD_PATHS for role in roles)
+    assert [p.name for p in paths] == ["01_driver.jpg", "card-back.jpg"]
+
+
+def test_card_back_key_maps_to_the_card_back_image() -> None:
+    back = help.card_path(help.CARD_BACK_KEY)
+
+    assert back is not None
+    assert back.name == "card-back.jpg"
+    assert back.is_file()

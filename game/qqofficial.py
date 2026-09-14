@@ -190,33 +190,35 @@ async def send_image(event: Any, relative_path: str) -> bool:
 
 async def send_reveal_image(
     event: Any,
-    roles: list[str],
+    cards: list[str],
     *,
     rng: secrets.SystemRandom | None = None,
 ) -> bool:
-    """身份揭露：把本轮参与抢劫的角色卡随机排序后合并成一张图片发送。"""
-    paths = [
-        path
-        for path in (help_module.role_card_path(role) for role in roles)
-        if path is not None and path.is_file()
-    ]
+    """身份揭露：把本轮中心牌堆合并成**一张**图片发送。
+
+    ``cards`` 为卡面键列表，其中被隐藏的那张使用卡背键。发送前顺序会随机
+    打乱，避免固定顺序暗示玩家与角色的对应关系。
+    """
+    paths = [path for path in help_module.card_paths(cards) if path.is_file()]
     if not paths:
-        logger.warning("[百万美金] 没有可发送的角色卡：%s", roles)
+        logger.warning("[百万美金] 没有可发送的卡面：%s", cards)
         return False
     # 顺序必须打乱，避免固定顺序暗示玩家与角色的对应关系
     ordered = cards_module.shuffled(paths, rng)
-    labels = [_role_label_for_path(path) for path in ordered]
+    labels = [_label_for_path(path) for path in ordered]
 
     output = _temp_image_path()
     try:
-        cards_module.compose_strip(ordered, output, labels=labels)
-    except Exception as exc:  # noqa: BLE001 - 合成失败时逐张退化为不发送
-        logger.warning("[百万美金] 角色卡合成失败：%s", exc)
+        cards_module.compose_grid(ordered, output, labels=labels)
+    except Exception as exc:  # noqa: BLE001 - 合成失败时不发送图片
+        logger.warning("[百万美金] 卡面合成失败：%s", exc)
         return False
     return await _send_image_file(event, output)
 
 
-def _role_label_for_path(path: Path) -> str:
+def _label_for_path(path: Path) -> str:
+    if help_module.resolve(help_module.CARD_BACK_PATH) == path:
+        return "已隐藏"
     for role, relative in help_module.ROLE_CARD_PATHS.items():
         if help_module.resolve(relative) == path:
             return role_label(role)
@@ -253,8 +255,8 @@ async def _send_single(
 ) -> bool:
     for relative_path in reply.images:
         await send_image(event, relative_path)
-    if reply.reveal_roles:
-        await send_reveal_image(event, reply.reveal_roles)
+    if reply.reveal_cards:
+        await send_reveal_image(event, reply.reveal_cards)
 
     payload = build_payload(reply)
     add_passive_reply_context(
