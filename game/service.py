@@ -38,40 +38,21 @@ DEFAULT_FORCE_ROB_DELAY = 60.0
 ACTION_COMMAND_PREFIX = "百万美金 操作 "
 MENU_COMMAND_PREFIX = "百万美金 "
 
-MENU_TEXT = """## 百万美金
-3～8 人的银行抢劫桌游。每个按钮都对应一条可以直接发送的指令。
+MENU_COMMAND_NAMES: dict[str, str] = {
+    "menu_create": "创建",
+    "menu_join": "加入",
+    "menu_leave_room": "退出房间",
+    "menu_start": "开始",
+    "menu_status": "状态",
+    "menu_transfer": "转账",
+    "menu_leave": "退出",
+    "menu_ready": "准备",
+    "menu_unready": "取消准备",
+    "menu_threat": "使用威胁牌",
+    "menu_help": "帮助",
+}
 
-**大厅**：创建房间 → 队友加入 → 首领开始（3～8 人）
-**谈判**：直接在群里交涉；转账和退出是两件互不关联的独立操作
-**结算**：还留在场上的玩家全部准备后自动结算、分赃，现金满 2000 万立即获胜
 
-首次游玩建议点「帮助」查看规则卡；强制抢劫等低频操作直接发送文本指令即可。"""
-
-MENU_ROWS: tuple[tuple[tuple[str, str, str], ...], ...] = (
-    (
-        ("menu_create", "创建房间", f"{MENU_COMMAND_PREFIX}创建"),
-        ("menu_join", "加入", f"{MENU_COMMAND_PREFIX}加入"),
-        ("menu_leave_room", "退出房间", f"{MENU_COMMAND_PREFIX}退出房间"),
-        ("menu_close", "关闭房间", f"{MENU_COMMAND_PREFIX}关闭"),
-    ),
-    (
-        ("menu_start", "开始游戏", f"{MENU_COMMAND_PREFIX}开始"),
-        ("menu_status", "查看状态", f"{MENU_COMMAND_PREFIX}状态"),
-    ),
-    (
-        ("menu_transfer", "转账", f"{MENU_COMMAND_PREFIX}转账"),
-        ("menu_leave", "退出本轮", f"{MENU_COMMAND_PREFIX}退出"),
-    ),
-    (
-        ("menu_ready", "准备", f"{MENU_COMMAND_PREFIX}准备"),
-        ("menu_unready", "取消准备", f"{MENU_COMMAND_PREFIX}取消准备"),
-    ),
-    (
-        ("menu_threat", "使用威胁牌", f"{MENU_COMMAND_PREFIX}使用威胁牌"),
-        ("menu_help", "帮助（规则卡）", f"{MENU_COMMAND_PREFIX}帮助"),
-    ),
-)
-"""菜单按钮：外层是行，内层是 ``(button_id, label, data)``。"""
 
 
 @dataclass(frozen=True)
@@ -199,20 +180,24 @@ class GameService:
     # ------------------------------------------------------------------
 
     async def menu(self, ctx: RequestContext) -> Reply:
-        """公开菜单：Markdown 说明 + 分行按钮组，所有按钮等价于文本指令。"""
-        buttons: list[ButtonSpec] = []
-        for row_index, row in enumerate(MENU_ROWS):
-            for button_id, label, data in row:
-                buttons.append(
-                    ButtonSpec(
-                        button_id=button_id,
-                        label=label,
-                        data=data,
-                        visited_label=label,
-                        row=row_index,
-                    )
+        """菜单：只列出「当前局面下这个人真正用得上」的按钮。
+
+        参考 ``astrbot_plugin_buckshot_roulette`` 的做法：没有房间就不给按钮，
+        大厅只给房间相关操作，开局后只给当前阶段能用的动作。
+        """
+        async with self._lock_for(ctx.platform_id, ctx.group_openid):
+            with self._repo.transaction() as conn:
+                replay = self._replay(conn, ctx)
+                if replay is not None:
+                    return replay
+                snapshot = self._repo.load_snapshot(
+                    conn, ctx.platform_id, ctx.group_openid
                 )
-        return Reply(text=MENU_TEXT, buttons=buttons)
+                reply = Reply(
+                    text=_menu_text(snapshot, ctx),
+                    buttons=_menu_buttons(snapshot, ctx),
+                )
+                return self._store(conn, ctx, reply)
 
     async def create(self, ctx: RequestContext) -> Reply:
         async with self._lock_for(ctx.platform_id, ctx.group_openid):
@@ -249,10 +234,7 @@ class GameService:
                         f"其他玩家发送「百万美金 加入」；"
                         f"至少 {MIN_PLAYERS} 人后首领发送「百万美金 开始」。"
                     ),
-                    buttons=[
-                        _public_button("lobby_join", "加入", f"{MENU_COMMAND_PREFIX}加入"),
-                        _public_button("lobby_start", "开始", f"{MENU_COMMAND_PREFIX}开始"),
-                    ],
+                    buttons=_lobby_buttons(snapshot),
                 )
                 return self._store(conn, ctx, reply)
 
@@ -282,7 +264,8 @@ class GameService:
                     text=(
                         f"{player.display_name}加入了房间（{_room_size(snapshot)}）。\n"
                         f"{_start_hint(snapshot)}"
-                    )
+                    ),
+                    buttons=_lobby_buttons(snapshot),
                 )
                 return self._store(conn, ctx, reply)
 
@@ -412,7 +395,8 @@ class GameService:
                     ctx,
                     Reply(
                         f"{player.display_name}退出了房间（{_room_size(snapshot)}）。"
-                        f"{extra}\n当前首领：{leader_text}。{_start_hint(snapshot)}"
+                        f"{extra}\n当前首领：{leader_text}。{_start_hint(snapshot)}",
+                        buttons=_lobby_buttons(snapshot),
                     ),
                 )
 
@@ -519,15 +503,18 @@ class GameService:
 
                 token_context = _token_context(snapshot, player)
                 buttons = []
-                for amount in range(1, player.cash + 1):
+                for amount in _transfer_amount_choices(player.cash):
                     token = self._signer.issue(
                         token_context,
                         TokenAction("transfer", {"target": target_openid, "amount": amount}),
                     )
+                    label = f"{amount} 百万"
+                    if amount == player.cash:
+                        label = f"{label}（全部）"
                     buttons.append(
                         ButtonSpec(
                             button_id=f"transfer_amount_{amount}",
-                            label=f"{amount} 百万",
+                            label=label,
                             data=f"{ACTION_COMMAND_PREFIX}{token}",
                             only_for=player.member_openid,
                         )
@@ -537,9 +524,8 @@ class GameService:
                     ctx,
                     Reply(
                         text=(
-                            f"转账给 {target.display_name}，选择金额"
-                            f"（当前现金 {player.cash}）。\n"
-                            "点击按钮后需要发送才能生效。"
+                            f"转账给 {target.display_name}（你现在有 {player.cash} 百万美元）。\n"
+                            "点一个金额，再发送出去才会真正转账。"
                         ),
                         buttons=buttons,
                     ),
@@ -1058,6 +1044,137 @@ def _token_context(snapshot: GameSnapshot, player: Player) -> TokenContext:
         phase=snapshot.phase.value,
         generation=player.action_generation,
         actor_openid=player.member_openid,
+    )
+
+
+def _transfer_amount_choices(cash: int) -> list[int]:
+    """转账金额按钮只给常用档位，避免为每一档都生成按钮。"""
+    amounts = [value for value in (1, 2, 3, 5) if value < cash]
+    if cash > 0 and cash not in amounts:
+        amounts.append(cash)
+    return amounts[:5]
+
+
+def _lobby_buttons(snapshot: GameSnapshot) -> list[ButtonSpec]:
+    """大厅里真正用得上的按钮：没满员才给「加入」，人够了才给「开始」。"""
+    buttons: list[ButtonSpec] = []
+    if len(snapshot.players) < MAX_PLAYERS:
+        buttons.append(
+            _public_button("lobby_join", "加入", f"{MENU_COMMAND_PREFIX}加入")
+        )
+    if len(snapshot.players) >= MIN_PLAYERS:
+        buttons.append(
+            _public_button("lobby_start", "开始游戏", f"{MENU_COMMAND_PREFIX}开始")
+        )
+    return buttons
+
+
+def _menu_button(button_id: str, label: str, data: str, row: int) -> ButtonSpec:
+    return ButtonSpec(
+        button_id=button_id,
+        label=label,
+        data=data,
+        visited_label=label,
+        row=row,
+    )
+
+
+def _menu_buttons(
+    snapshot: GameSnapshot | None,
+    ctx: RequestContext,
+) -> list[ButtonSpec]:
+    """按当前局面生成菜单按钮：只给这个人现在用得上的操作。"""
+    rows: list[list[tuple[str, str]]] = []
+    help_row = ("menu_help", "帮助（规则卡）")
+
+    if snapshot is None or snapshot.phase is Phase.GAME_OVER:
+        rows.append([("menu_create", "创建房间"), help_row])
+    elif snapshot.phase is Phase.LOBBY:
+        row: list[tuple[str, str]] = []
+        if len(snapshot.players) < MAX_PLAYERS:
+            row.append(("menu_join", "加入"))
+        row.append(("menu_leave_room", "退出房间"))
+        leader = snapshot.leader
+        if (
+            leader is not None
+            and leader.member_openid == ctx.member_openid
+            and len(snapshot.players) >= MIN_PLAYERS
+        ):
+            row.append(("menu_start", "开始游戏"))
+        rows.append(row)
+        rows.append([("menu_status", "查看状态"), help_row])
+    elif snapshot.phase is Phase.ROLE_SELECTION:
+        rows.append([("menu_status", "查看状态"), help_row])
+    elif snapshot.phase is Phase.NEGOTIATION:
+        player = snapshot.player(ctx.member_openid)
+        row = []
+        if player is not None and player.has_active_slot():
+            if player.cash > 0 and len(snapshot.players) > 1:
+                row.append(("menu_transfer", "转账"))
+            row.append(("menu_leave", "退出本轮"))
+            row.append(
+                ("menu_unready", "取消准备") if player.ready else ("menu_ready", "准备")
+            )
+            if player.threat_cards > 0:
+                row.append(("menu_threat", "使用威胁牌"))
+        if row:
+            rows.append(row)
+        rows.append([("menu_status", "查看状态"), help_row])
+    else:
+        rows.append([("menu_status", "查看状态"), help_row])
+
+    buttons: list[ButtonSpec] = []
+    for row_index, row in enumerate(rows):
+        for button_id, label in row:
+            name = MENU_COMMAND_NAMES[button_id]
+            buttons.append(
+                _menu_button(button_id, label, f"{MENU_COMMAND_PREFIX}{name}", row_index)
+            )
+    return buttons
+
+
+def _menu_text(snapshot: GameSnapshot | None, ctx: RequestContext) -> str:
+    """菜单说明：只讲当前局面该做什么。"""
+    if snapshot is None:
+        return (
+            "## 百万美金\n"
+            "本群还没有对局。\n\n"
+            "点「创建房间」开一局 3～8 人的银行抢劫桌游，"
+            "点「帮助」可以先看规则卡。"
+        )
+    if snapshot.phase is Phase.GAME_OVER:
+        return (
+            "## 百万美金\n"
+            "本局已经结束。\n\n"
+            "点「创建房间」可以开新的一局，点「帮助」查看规则卡。"
+        )
+    if snapshot.phase is Phase.LOBBY:
+        return (
+            f"## 百万美金（大厅，人数 {_room_ratio(snapshot)}）\n"
+            f"{_start_hint(snapshot)}\n\n"
+            "队友发送「百万美金 加入」进房间；首领发送「百万美金 开始」开局。"
+        )
+    if snapshot.phase is Phase.ROLE_SELECTION:
+        return (
+            "## 百万美金（选角中）\n"
+            "每位玩家的选角按钮已经单独发给你自己，只有本人能看到，选完请点按钮发送。\n\n"
+            "点「查看状态」可以看进度。"
+        )
+    if snapshot.phase is Phase.NEGOTIATION:
+        player = snapshot.player(ctx.member_openid)
+        if player is None or not player.has_active_slot():
+            return (
+                f"## 百万美金（谈判中，第 {snapshot.round_number} 回合）\n"
+                "你这一轮已经退出，等其他人谈完就行。"
+            )
+        return (
+            f"## 百万美金（谈判中，第 {snapshot.round_number} 回合）\n"
+            "直接在群里交涉，谈好后点「准备」；转账和退出是两件独立的事，"
+            "都只影响你的人物和现金。"
+        )
+    return (
+        f"## 百万美金（{phase_label(snapshot.phase)}）\n"
+        "这一阶段不需要你操作，等结算结果即可。"
     )
 
 
