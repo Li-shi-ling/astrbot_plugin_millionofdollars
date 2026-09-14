@@ -210,3 +210,11 @@ __marimo__/
 .omx/
 tmp/
 .pipeline-workspace/
+
+# 插件本地运行产物：AstrBot 数据目录、安装包、SQLite、缓存
+data/
+dist/
+*.sqlite3
+*.sqlite3-wal
+*.sqlite3-shm
+hmac_secret.bin

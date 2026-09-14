@@ -1,6 +1,6 @@
 name: astrbot_plugin_millionofdollars
 display_name: 百万美金
-desc: 《百万美金》桌游插件，已完成 QQ 官方 Bot 开发设计。
-version: v1.3.3
+desc: 《百万美金》桌游插件，已实现 QQ 官方 Bot 的选角、谈判、结算与分赃流程。
+version: v1.4.0
 author: Li-shi-ling
 repo: https://github.com/Li-shi-ling/astrbot_plugin_millionofdollars
