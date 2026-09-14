@@ -21,7 +21,7 @@ try:  # AstrBot 以包形式加载插件时走相对导入
     from .game import qqofficial
     from .game.models import RuleError
     from .game.repository import GameRepository
-    from .game.service import MENU_TEXT, GameService, Reply, RequestContext
+    from .game.service import GameService, Reply, RequestContext
     from .game.tokens import TokenSigner
 except ImportError:  # pragma: no cover - 兼容以顶层模块加载
     plugin_dir = Path(__file__).resolve().parent
@@ -31,7 +31,7 @@ except ImportError:  # pragma: no cover - 兼容以顶层模块加载
     from game import qqofficial
     from game.models import RuleError
     from game.repository import GameRepository
-    from game.service import MENU_TEXT, GameService, Reply, RequestContext
+    from game.service import GameService, Reply, RequestContext
     from game.tokens import TokenSigner
 
 PLUGIN_NAME = "astrbot_plugin_millionofdollars"
@@ -93,7 +93,7 @@ COMMAND_ALIASES = {
 """无空格写法（如 ``百万美金创建``）也注册成别名，避免漏进默认 LLM 链路。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.1")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.2")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -211,7 +211,10 @@ class MillionsOfDollarsPlugin(Star):
                 return Reply("缺少操作令牌，请重新点击按钮。")
             return await service.handle_token(request, argument)
 
-        return Reply(f"未知的子指令：{subcommand}\n\n{MENU_TEXT}")
+        return Reply(
+            f"没有「{subcommand}」这个操作。\n"
+            "发送「百万美金 菜单」看看当前能做什么，或发送「百万美金 帮助」查看规则卡。"
+        )
 
 
 def _stop_llm(event: AstrMessageEvent) -> None:

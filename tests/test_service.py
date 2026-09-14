@@ -622,32 +622,153 @@ async def test_snitch_selection_defers_the_reveal_image(service: GameService) ->
     assert final.reveal_cards.count("card_back") == 1
 
 
-async def test_menu_matches_the_reference_layout(service: GameService) -> None:
-    """菜单参考恶魔轮盘插件：Markdown 说明 + 分行按钮组，data 等价文本指令。"""
-    reply = await service.menu(ctx("a", "menu-1"))
+def menu_labels(reply: Reply) -> list[str]:
+    return [button.label for button in reply.buttons]
 
-    assert reply.text.startswith("## 百万美金")
-    assert "大厅" in reply.text and "谈判" in reply.text and "结算" in reply.text
-    assert "帮助" in reply.text
 
-    # 5 行：第一行房间管理 4 个按钮，其余每行 2 个
-    rows: dict[int, list] = {}
-    for button in reply.buttons:
-        rows.setdefault(button.row, []).append(button)
-    assert sorted(rows) == [0, 1, 2, 3, 4]
-    assert [len(rows[index]) for index in sorted(rows)] == [4, 2, 2, 2, 2]
-
-    # 公开按钮 + 按钮文案即 visited_label + data 是可手动输入的指令
+def assert_menu_buttons_are_sane(reply: Reply) -> None:
     for button in reply.buttons:
         assert button.only_for is None
         assert button.visited_label == button.label
         assert button.data.startswith("百万美金 ")
         assert button.button_id.startswith("menu_")
 
+
+async def test_menu_without_game_only_offers_create_and_help(
+    service: GameService,
+) -> None:
+    reply = await service.menu(ctx("a", "menu-empty"))
+
+    assert reply.images == []
+    assert menu_labels(reply) == ["创建房间", "帮助（规则卡）"]
+    assert "还没有对局" in reply.text
+    assert_menu_buttons_are_sane(reply)
+
+
+async def test_menu_in_lobby_matches_the_current_state(
+    service: GameService,
+) -> None:
+    await make_lobby(service, ["a", "b"])
+
+    # 首领但人不够：不给「开始游戏」
+    leader_reply = await service.menu(ctx("a", "menu-lobby-leader"))
+    assert menu_labels(leader_reply) == ["加入", "退出房间", "查看状态", "帮助（规则卡）"]
+    assert "大厅" in leader_reply.text
+
+    # 非首领同样看不到「开始游戏」
+    other_reply = await service.menu(ctx("b", "menu-lobby-other"))
+    assert "开始游戏" not in menu_labels(other_reply)
+
+    # 人满了又没满员：首领可以看到「开始游戏」
+    await service.join(ctx("c", "menu-lobby-join-c"))
+    started_ready = await service.menu(ctx("a", "menu-lobby-3"))
+    assert "开始游戏" in menu_labels(started_ready)
+    assert_menu_buttons_are_sane(started_ready)
+
+
+async def test_menu_in_negotiation_only_offers_negotiation_actions(
+    service: GameService,
+) -> None:
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+
+    reply = await service.menu(ctx("a", "menu-negotiation"))
+    labels = menu_labels(reply)
+
+    # 谈判阶段不该出现房间/开局相关按钮
+    for bad in ["创建房间", "加入", "退出房间", "开始游戏"]:
+        assert bad not in labels
+    assert labels == ["转账", "退出本轮", "准备", "查看状态", "帮助（规则卡）"]
+    assert "谈判中" in reply.text
+    assert_menu_buttons_are_sane(reply)
+
+
+async def test_menu_ready_button_flips_and_threat_is_conditional(
+    service: GameService,
+) -> None:
+    await enter_negotiation(
+        service,
+        {"a": "brute", "b": "driver", "c": "crook", "d": "driver"},
+    )
+
+    before = await service.menu(ctx("a", "menu-before-ready"))
+    assert "使用威胁牌" not in menu_labels(before)  # 还没拿到威胁牌
+    assert "准备" in menu_labels(before)
+    assert "取消准备" not in menu_labels(before)
+
+    await service.set_ready(ctx("a", "menu-ready"), True)
+    after = await service.menu(ctx("a", "menu-after-ready"))
+    assert "取消准备" in menu_labels(after)
+    assert "准备" not in menu_labels(after)
+
+    # 手工给一张威胁牌后，菜单才出现「使用威胁牌」
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    snapshot.players[0].threat_cards = 1
+    service._repo.save(snapshot)
+    with_card = await service.menu(ctx("a", "menu-with-threat"))
+    assert "使用威胁牌" in menu_labels(with_card)
+
+
+async def test_menu_after_leaving_round_has_no_action_buttons(
+    service: GameService,
+) -> None:
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+    leave = await service.leave_menu(ctx("a", "menu-leave"))
+    await service.handle_token(ctx("a", "menu-leave-confirm"), token_from(leave))
+
+    reply = await service.menu(ctx("a", "menu-after-leave"))
+
+    assert menu_labels(reply) == ["查看状态", "帮助（规则卡）"]
+
+
+async def test_menu_after_game_over_offers_new_room(service: GameService) -> None:
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    snapshot.phase = Phase.GAME_OVER
+    service._repo.save(snapshot)
+
+    reply = await service.menu(ctx("a", "menu-game-over"))
+
+    assert menu_labels(reply) == ["创建房间", "帮助（规则卡）"]
+    assert "已经结束" in reply.text
+
+
+async def test_lobby_buttons_grow_with_the_room(service: GameService) -> None:
+    created = await service.create(ctx("a", "lb-1", "小明"))
+    assert "加入" in menu_labels(created)
+    assert "开始游戏" not in menu_labels(created)  # 只有 1 人
+
+    await service.join(ctx("b", "lb-2", "小红"))
+    joined = await service.join(ctx("c", "lb-3", "小刚"))
+    assert [b.label for b in joined.buttons] == ["加入", "开始游戏"]
+
+
+async def test_transfer_amount_buttons_are_limited(
+    service: GameService,
+) -> None:
+    await enter_negotiation(
+        service,
+        {"a": "driver", "b": "brute", "c": "crook", "d": "driver"},
+    )
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    snapshot.players[0].cash = 20  # 现金很多时也不该给 20 个按钮
+    service._repo.save(snapshot)
+
+    reply = await service.transfer_amounts(ctx("a", "amount-many"), "b")
+
     labels = [button.label for button in reply.buttons]
-    assert labels[:4] == ["创建房间", "加入", "退出房间", "关闭房间"]
-    assert "帮助（规则卡）" in labels
-    assert next(b.data for b in reply.buttons if b.label == "帮助（规则卡）") == "百万美金 帮助"
+    assert labels == ["1 百万", "2 百万", "3 百万", "5 百万", "20 百万（全部）"]
 
 
 # ----------------------------------------------------------------------
