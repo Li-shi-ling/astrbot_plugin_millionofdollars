@@ -37,7 +37,7 @@
 | `百万美金准备` / `百万美金取消准备` | 有活动槽位的玩家全部准备后立即结算 |
 | `百万美金强制抢劫` | 谈判开始 60 秒后仅首领可用，立即进入结算 |
 | `百万美金使用威胁牌` | 需要持有威胁牌；点击后身份只出现在输入框，请勿发送 |
-| `百万美金帮助` | 输出规则卡图片与规则速览（`百万美金规则`、`百万美金规则卡` 同义） |
+| `百万美金帮助` | 只输出规则卡图片，不附带文字消息（`百万美金规则`、`百万美金规则卡` 同义） |
 | `百万美金操作 <令牌>` | 秘密动作按钮自动生成的指令 |
 
 每项操作都像轮盘赌插件一样注册为独立的完整 AstrBot 指令，不依赖“父指令 + 子指令”。
@@ -48,7 +48,7 @@ QQ Markdown 状态消息会突出关键字段；
 
 ### 卡图
 
-- `百万美金帮助` 会发送**规则卡**图片（`docs/sources/rule-cards/rule-card.jpg`）；
+- `百万美金帮助` 只发送**规则卡**图片（`docs/sources/rule-cards/rule-card.jpg`），不再追加文字消息；
 - 每轮**身份揭露**（抢劫结算）时，会把本轮**中心牌堆**合并成一张图片发送：
   每个提交过角色的槽位一张，其中被随机隐藏的那张显示**卡背**；
   卡片顺序每次随机打乱，避免顺序暗示玩家与角色的对应关系；
@@ -82,6 +82,7 @@ QQ Markdown 状态消息会突出关键字段；
 - [资料来源与版本说明](./docs/README.md)
 - [QQ 官方 Bot 开发说明](./docs/qqofficial-bot-development.md)
 - [QQ 官方 Bot 游戏开发实现设计](./docs/game-implementation-design.md)
+- [用户可见消息清单](./docs/user-facing-message-inventory.md)
 - [赃物牌组核验记录](./docs/loot-deck-verification.md)
 - [2016 初版英文规则书 PDF](./docs/sources/millions-of-dollars-2016-rulebook-en.pdf)
 - [2024 二版英文规则书 PDF](./docs/sources/millions-of-dollars-2024-rulebook-en.pdf)

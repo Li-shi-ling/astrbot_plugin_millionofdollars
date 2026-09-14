@@ -535,11 +535,22 @@ async def test_full_game_reaches_game_over(tmp_path, clock) -> None:
 async def test_help_outputs_the_rules_card(service: GameService) -> None:
     reply = await service.help(ctx("a", "help-1"))
 
-    assert "规则速览" in reply.text
+    assert reply.text == ""
     assert reply.images
     for relative in reply.images:
         assert relative == "docs/sources/rule-cards/rule-card.jpg"
         assert service_help_path(relative).is_file()
+
+
+async def test_help_reports_missing_rules_card(service: GameService, monkeypatch, tmp_path) -> None:
+    from game import help as help_module
+
+    monkeypatch.setattr(help_module, "rules_card_path", lambda: tmp_path / "missing.jpg")
+
+    reply = await service.help(ctx("a", "help-missing"))
+
+    assert "规则卡图片缺失" in reply.text
+    assert reply.images == []
 
 
 def service_help_path(relative: str):
@@ -659,19 +670,18 @@ async def test_menu_in_lobby_matches_the_current_state(
 ) -> None:
     await make_lobby(service, ["a", "b"])
 
-    # 首领但人不够：不给「开始游戏」
+    # 主菜单只负责导航，不放退出房间；首领人数不足时也不显示开始。
     leader_reply = await service.menu(ctx("a", "menu-lobby-leader"))
     assert menu_labels(leader_reply) == [
-        "退出房间",
         "查看状态",
         "帮助（规则卡）",
         "关闭房间",
     ]
     assert "大厅" in leader_reply.text
 
-    # 已加入的非首领看不到「加入 / 开始 / 关闭」
+    # 已加入的非首领只保留状态和帮助。
     other_reply = await service.menu(ctx("b", "menu-lobby-other"))
-    assert menu_labels(other_reply) == ["退出房间", "查看状态", "帮助（规则卡）"]
+    assert menu_labels(other_reply) == ["查看状态", "帮助（规则卡）"]
 
     # 未加入者只看到加入和只读入口
     outsider_reply = await service.menu(ctx("z", "menu-lobby-outsider"))
@@ -768,14 +778,20 @@ async def test_menu_after_game_over_offers_new_room(service: GameService) -> Non
     assert "已经结束" in reply.text
 
 
-async def test_lobby_buttons_grow_with_the_room(service: GameService) -> None:
+async def test_lobby_replies_always_offer_join_leave_and_start(
+    service: GameService,
+) -> None:
     created = await service.create(ctx("a", "lb-1", "小明"))
-    assert "加入" in menu_labels(created)
-    assert "开始游戏" not in menu_labels(created)  # 只有 1 人
+    assert menu_labels(created) == ["加入", "退出", "开始"]
+    assert [button.data for button in created.buttons] == [
+        "百万美金加入",
+        "百万美金退出房间",
+        "百万美金开始",
+    ]
 
     await service.join(ctx("b", "lb-2", "小红"))
     joined = await service.join(ctx("c", "lb-3", "小刚"))
-    assert [b.label for b in joined.buttons] == ["加入", "开始游戏"]
+    assert menu_labels(joined) == ["加入", "退出", "开始"]
 
 
 async def test_transfer_amount_buttons_are_limited(
@@ -880,7 +896,9 @@ async def test_force_rob_button_appears_only_for_leader_after_timeout(
 async def test_lobby_replies_show_player_count(service: GameService) -> None:
     created = await service.create(ctx("a", "cnt-1", "小明"))
     assert "（1/8 人）" in created.text
-    assert "至少 3 人" in created.text
+    assert "最少 3 人" in created.text
+    assert "百万美金加入" not in created.text
+    assert "百万美金开始" not in created.text
 
     joined = await service.join(ctx("b", "cnt-2", "小红"))
     assert "（2/8 人）" in joined.text
@@ -890,6 +908,7 @@ async def test_lobby_replies_show_player_count(service: GameService) -> None:
     third = await service.join(ctx("d", "cnt-4", "小强"))
     assert "（4/8 人）" in third.text
     assert "人数已满足" in third.text
+    assert "百万美金" not in third.text
 
     status = await service.status(ctx("a", "cnt-5"))
     assert "人数：4/8" in status.text
@@ -965,7 +984,8 @@ async def test_leave_room_is_lobby_only(service: GameService) -> None:
     reply = await service.leave_room(ctx("a", "leave-too-late"))
 
     assert "对局已经开始" in reply.text
-    assert "百万美金退出" in reply.text
+    assert "谈判阶段可以退出本轮" in reply.text
+    assert "百万美金退出" not in reply.text
 
 
 async def test_close_room_requires_leader_or_admin(service: GameService) -> None:

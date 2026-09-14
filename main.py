@@ -87,7 +87,7 @@ REGISTERED_COMMANDS = (
 """AstrBot 指令列表中公开显示的完整命令。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.4")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.5")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -325,7 +325,7 @@ class MillionsOfDollarsPlugin(Star):
 
         return Reply(
             f"没有「{action}」这个操作。\n"
-            "发送「百万美金菜单」看看当前能做什么，或发送「百万美金帮助」查看规则卡。"
+            "请打开菜单查看当前可用操作，或通过帮助按钮查看规则卡。"
         )
 
 

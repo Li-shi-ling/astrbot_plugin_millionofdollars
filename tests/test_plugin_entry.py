@@ -132,7 +132,7 @@ def test_help_command_returns_the_rules_card_image(main_module, monkeypatch, tmp
 
     reply = asyncio.run(plugin._dispatch("百万美金帮助", request))
 
-    assert "规则速览" in reply.text
+    assert reply.text == ""
     assert reply.images == ["docs/sources/rule-cards/rule-card.jpg"]
 
 

@@ -324,10 +324,14 @@ async def _send_single(
     extra: bool,
     msg_seq: int,
 ) -> bool:
+    media_ok = True
     for relative_path in reply.images:
-        await send_image(event, relative_path)
+        media_ok = await send_image(event, relative_path) and media_ok
     if reply.reveal_cards:
-        await send_reveal_image(event, reply.reveal_cards)
+        media_ok = await send_reveal_image(event, reply.reveal_cards) and media_ok
+
+    if not reply.text.strip() and not reply.buttons:
+        return media_ok
 
     payload = build_payload(reply)
     add_passive_reply_context(
@@ -348,9 +352,9 @@ async def _send_single(
                 group_openid=context.group_openid,
                 **payload,
             )
-            return True
+            return media_ok
         await event.send(event.plain_result(reply.text))
-        return True
+        return media_ok
     except Exception as exc:  # noqa: BLE001 - 外部 API 异常需要兜底
         logger.warning("[百万美金] 发送失败: %s", exc)
         if reply.buttons:

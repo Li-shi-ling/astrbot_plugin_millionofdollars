@@ -9,6 +9,7 @@
 - [完整中文规则](./million-of-dollars-rules-zh.md)
 - [QQ 官方 Bot 开发说明](./qqofficial-bot-development.md)
 - [QQ 官方 Bot 游戏开发实现设计](./game-implementation-design.md)
+- [用户可见消息清单](./user-facing-message-inventory.md)
 - [赃物牌组核验](./loot-deck-verification.md)
 - [2016 初版英文规则书 PDF](./sources/millions-of-dollars-2016-rulebook-en.pdf)
 

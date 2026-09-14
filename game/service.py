@@ -41,7 +41,6 @@ MENU_COMMAND_PREFIX = "百万美金"
 MENU_COMMAND_NAMES: dict[str, str] = {
     "menu_create": "创建",
     "menu_join": "加入",
-    "menu_leave_room": "退出房间",
     "menu_start": "开始",
     "menu_roles": "选角",
     "menu_status": "状态",
@@ -56,7 +55,6 @@ MENU_COMMAND_NAMES: dict[str, str] = {
 }
 
 REQUESTER_ONLY_MENU_IDS = {
-    "menu_leave_room",
     "menu_start",
     "menu_roles",
     "menu_transfer",
@@ -230,7 +228,7 @@ class GameService:
                     conn, ctx.platform_id, ctx.group_openid
                 )
                 if existing is not None and existing.phase is not Phase.GAME_OVER:
-                    reply = Reply("本群已经有一局未结束的《百万美金》了，先发送「百万美金状态」查看。")
+                    reply = Reply("本群已经有一局未结束的《百万美金》了，请通过状态按钮查看。")
                     return self._store(conn, ctx, reply)
 
                 snapshot = GameSnapshot(
@@ -251,8 +249,7 @@ class GameService:
                     text=(
                         f"已创建房间（{_room_size(snapshot)}），"
                         f"{snapshot.players[0].display_name}成为首领。\n"
-                        f"其他玩家发送「百万美金加入」；"
-                        f"至少 {MIN_PLAYERS} 人后首领发送「百万美金开始」。"
+                        f"{_start_hint(snapshot)}"
                     ),
                     buttons=_lobby_buttons(snapshot),
                 )
@@ -335,13 +332,11 @@ class GameService:
                 return self._store(conn, ctx, reply)
 
     async def help(self, ctx: RequestContext) -> Reply:
-        """帮助接口：输出规则卡图片与规则速览。"""
+        """帮助接口：规则卡存在时只输出图片。"""
         card = help_module.rules_card_path()
-        images = [help_module.RULES_CARD.relative_path] if card.is_file() else []
-        text = help_module.HELP_TEXT
-        if not images:
-            text += "\n\n（规则卡图片缺失，请联系管理员检查插件文件。）"
-        return Reply(text=text, images=images)
+        if card.is_file():
+            return Reply(text="", images=[help_module.RULES_CARD.relative_path])
+        return Reply(text="规则卡图片缺失，请联系管理员检查插件文件。")
 
     async def role_menu(self, ctx: RequestContext) -> Reply:
         """重新生成当前玩家的选角按钮，并只失效该玩家的旧按钮。"""
@@ -391,7 +386,7 @@ class GameService:
                     return self._store(
                         conn,
                         ctx,
-                        Reply("对局已经开始，不能退出房间（谈判阶段请用「百万美金退出」）。"),
+                        Reply("对局已经开始，不能退出房间；谈判阶段可以退出本轮。"),
                     )
 
                 player = snapshot.player(ctx.member_openid)
@@ -479,7 +474,7 @@ class GameService:
                     ctx,
                     Reply(
                         f"房间已关闭（关闭前 {size}：{names}）。\n"
-                        "需要重新开始时发送「百万美金创建」。"
+                        "需要继续游玩时可以重新创建房间。"
                     ),
                 )
 
@@ -1053,7 +1048,7 @@ class GameService:
     ) -> GameSnapshot:
         snapshot = self._repo.load_snapshot(conn, ctx.platform_id, ctx.group_openid)
         if snapshot is None:
-            raise RuleError("本群还没有对局，先发送「百万美金创建」。")
+            raise RuleError("本群还没有对局，请先创建房间。")
         return snapshot
 
     def _require_active_player(
@@ -1123,18 +1118,17 @@ def _transfer_amount_choices(cash: int) -> list[int]:
     return amounts[:5]
 
 
-def _lobby_buttons(snapshot: GameSnapshot) -> list[ButtonSpec]:
-    """大厅里真正用得上的按钮：没满员才给「加入」，人够了才给「开始」。"""
-    buttons: list[ButtonSpec] = []
-    if len(snapshot.players) < MAX_PLAYERS:
-        buttons.append(
-            _public_button("lobby_join", "加入", f"{MENU_COMMAND_PREFIX}加入")
-        )
-    if len(snapshot.players) >= MIN_PLAYERS:
-        buttons.append(
-            _public_button("lobby_start", "开始游戏", f"{MENU_COMMAND_PREFIX}开始")
-        )
-    return buttons
+def _lobby_buttons(_snapshot: GameSnapshot) -> list[ButtonSpec]:
+    """大厅回复固定提供加入、退出和开始，与轮盘赌房间操作区一致。"""
+    return [
+        _public_button("lobby_join", "加入", f"{MENU_COMMAND_PREFIX}加入"),
+        _public_button(
+            "lobby_leave_room",
+            "退出",
+            f"{MENU_COMMAND_PREFIX}退出房间",
+        ),
+        _public_button("lobby_start", "开始", f"{MENU_COMMAND_PREFIX}开始"),
+    ]
 
 
 def _menu_button(
@@ -1172,8 +1166,6 @@ def _menu_buttons(
         row: list[tuple[str, str]] = []
         if player is None and len(snapshot.players) < MAX_PLAYERS:
             row.append(("menu_join", "加入"))
-        if player is not None:
-            row.append(("menu_leave_room", "退出房间"))
         leader = snapshot.leader
         if (
             leader is not None
@@ -1264,8 +1256,7 @@ def _menu_text(snapshot: GameSnapshot | None, ctx: RequestContext) -> str:
     if snapshot.phase is Phase.LOBBY:
         return (
             f"## 百万美金（大厅，人数 {_room_ratio(snapshot)}）\n"
-            f"{_start_hint(snapshot)}\n\n"
-            "队友发送「百万美金加入」进房间；首领发送「百万美金开始」开局。"
+            f"{_start_hint(snapshot)}"
         )
     if snapshot.phase is Phase.ROLE_SELECTION:
         return (
@@ -1307,7 +1298,7 @@ def _start_hint(snapshot: GameSnapshot) -> str:
     if count < MIN_PLAYERS:
         return f"还需要 {MIN_PLAYERS - count} 人才能开局（最少 {MIN_PLAYERS} 人）。"
     if snapshot.phase is Phase.LOBBY:
-        return "人数已满足，首领发送「百万美金开始」即可开局。"
+        return "人数已满足，可以开始游戏。"
     return ""
 
 
@@ -1355,7 +1346,7 @@ def _public_role_text(snapshot: GameSnapshot, card: LootCard) -> str:
         f"第 {snapshot.round_number} 轮赃物牌：赃款 {card.amount} 百万美元，"
         f"保证金 {card.ante} 百万美元{bonus}。\n"
         f"公开角色：{counts or '无'}\n"
-        "谈判开始，玩家可以在群里自行交涉，然后使用「百万美金准备」。"
+        "谈判开始，玩家可以在群里自行交涉，谈妥后点击准备按钮。"
     )
 
 
@@ -1365,7 +1356,7 @@ def _opening_text(snapshot: GameSnapshot, card: LootCard | None) -> str:
     return (
         f"游戏开始，共 {len(snapshot.players)} 人：{names}。\n"
         f"第 1 轮赃物牌：赃款 {amount}。\n"
-        "每位玩家会收到只对自己可见的选角按钮；也可以发送「百万美金状态」查看进度。"
+        "每位玩家会收到只对自己可见的选角按钮；选角进度可以通过状态按钮查看。"
     )
 
 

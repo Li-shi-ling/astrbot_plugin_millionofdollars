@@ -421,7 +421,7 @@ async def test_send_reveal_image_falls_back_when_no_card(monkeypatch, tmp_path) 
 
 
 @pytest.mark.asyncio
-async def test_send_reply_sends_rule_card_then_text(monkeypatch) -> None:
+async def test_send_reply_sends_rule_card_without_text(monkeypatch) -> None:
     monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
     calls: list = []
     sent: list = []
@@ -434,7 +434,7 @@ async def test_send_reply_sends_rule_card_then_text(monkeypatch) -> None:
         message_id="msg-1",
     )
     reply = Reply(
-        text="规则速览",
+        text="",
         images=["docs/sources/rule-cards/rule-card.jpg"],
     )
 
@@ -443,8 +443,7 @@ async def test_send_reply_sends_rule_card_then_text(monkeypatch) -> None:
     assert ok is True
     assert len(sent) == 1
     assert "rule-card.jpg" in sent[0].image_path
-    assert len(calls) == 1
-    assert calls[0]["content"] == "规则速览"
+    assert calls == []
 
 
 @pytest.mark.asyncio
