@@ -54,19 +54,6 @@ MENU_COMMAND_NAMES: dict[str, str] = {
     "menu_help": "帮助",
 }
 
-REQUESTER_ONLY_MENU_IDS = {
-    "menu_start",
-    "menu_roles",
-    "menu_transfer",
-    "menu_leave",
-    "menu_ready",
-    "menu_unready",
-    "menu_threat",
-    "menu_force",
-    "menu_close",
-}
-
-
 
 
 @dataclass(frozen=True)
@@ -506,13 +493,13 @@ class GameService:
                 for number, target in enumerate(snapshot.players, start=1):
                     if target.member_openid == ctx.member_openid:
                         continue
+                    # 用房间内的序号指人，避免把 openid 写进玩家要发送的指令里
                     buttons.append(
                         ButtonSpec(
                             button_id=f"transfer_target_{number}",
                             label=f"{number}.{_short_display_name(target.display_name)}",
-                            data=f"{MENU_COMMAND_PREFIX}转账 {target.member_openid}",
+                            data=f"{MENU_COMMAND_PREFIX}转账 {number}",
                             visited_label="已选择",
-                            only_for=player.member_openid,
                         )
                     )
                 if not buttons:
@@ -539,9 +526,13 @@ class GameService:
                 player = self._require_active_player(snapshot, ctx)
                 if snapshot.phase is not Phase.NEGOTIATION:
                     return self._store(conn, ctx, Reply("只有谈判阶段可以转账。"))
-                target = snapshot.player(target_openid)
+                target = _resolve_transfer_target(snapshot, target_openid)
                 if target is None:
-                    return self._store(conn, ctx, Reply("找不到该玩家。"))
+                    return self._store(
+                        conn,
+                        ctx,
+                        Reply("没有这个序号对应的玩家，请重新点转账按钮。"),
+                    )
                 if target.member_openid == ctx.member_openid:
                     return self._store(conn, ctx, Reply("不能向自己转账。"))
                 if player.cash <= 0:
@@ -552,7 +543,11 @@ class GameService:
                 for amount in _transfer_amount_choices(player.cash):
                     token = self._signer.issue(
                         token_context,
-                        TokenAction("transfer", {"target": target_openid, "amount": amount}),
+                        # 令牌里必须写玩家身份，不能用序号，否则服务端匹配不上
+                        TokenAction(
+                            "transfer",
+                            {"target": target.member_openid, "amount": amount},
+                        ),
                     )
                     label = f"{amount} 百万"
                     if amount == player.cash:
@@ -650,7 +645,7 @@ class GameService:
                     return self._store(conn, ctx, Reply("只有谈判阶段可以准备。"))
 
                 player.ready = ready
-                events = [f"{player.display_name}{'已准备' if ready else '取消准备'}。"]
+                events = [_ready_event(snapshot, player, ready)]
                 reveal_cards: list[str] = []
                 if ready and _all_ready(snapshot):
                     events.append("全员准备完毕，立即结算本轮抢劫。")
@@ -879,7 +874,7 @@ class GameService:
             self._bump(snapshot, player)
             ready = matched.action == "ready"
             player.ready = ready
-            events = [f"{player.display_name}{'已准备' if ready else '取消准备'}。"]
+            events = [_ready_event(snapshot, player, ready)]
             if ready and _all_ready(snapshot):
                 events.append("全员准备完毕，立即结算本轮抢劫。")
                 resolved, reveal_cards = self._resolve(snapshot)
@@ -1121,6 +1116,25 @@ def _token_context(snapshot: GameSnapshot, player: Player) -> TokenContext:
     )
 
 
+def _resolve_transfer_target(
+    snapshot: GameSnapshot,
+    reference: str,
+) -> Player | None:
+    """把转账目标解析成玩家。
+
+    接受房间内的序号（1 开始，与转账按钮一致），也兼容旧的 openid 写法。
+    """
+    text = str(reference or "").strip()
+    if not text:
+        return None
+    if text.isdigit():
+        index = int(text)
+        if 1 <= index <= len(snapshot.players):
+            return snapshot.players[index - 1]
+        return None
+    return snapshot.player(text)
+
+
 def _transfer_amount_choices(cash: int) -> list[int]:
     """转账金额按钮只给常用档位，避免为每一档都生成按钮。"""
     amounts = [value for value in (1, 2, 3, 5) if value < cash]
@@ -1247,18 +1261,13 @@ def _menu_buttons(
     for row_index, row in enumerate(rows):
         for button_id, label in row:
             name = MENU_COMMAND_NAMES[button_id]
-            only_for = (
-                ctx.member_openid
-                if button_id in REQUESTER_ONLY_MENU_IDS
-                else None
-            )
+            # 菜单里的操作都是「谁点谁是操作者」，按钮本身不限制点击人
             buttons.append(
                 _menu_button(
                     button_id,
                     label,
                     f"{MENU_COMMAND_PREFIX}{name}",
                     row_index,
-                    only_for=only_for,
                 )
             )
     return buttons
@@ -1306,6 +1315,21 @@ def _menu_text(snapshot: GameSnapshot | None, ctx: RequestContext) -> str:
         f"## 百万美金（{phase_label(snapshot.phase)}）\n"
         "这一阶段不需要你操作，等结算结果即可。"
     )
+
+
+def _ready_progress(snapshot: GameSnapshot) -> str:
+    """还在场的玩家里有几人已准备，例如 ``2/4 人已准备``。"""
+    participants = [player for player in snapshot.players if player.has_active_slot()]
+    ready = [player for player in participants if player.ready]
+    return f"{len(ready)}/{len(participants)} 人已准备"
+
+
+def _ready_event(snapshot: GameSnapshot, player: Player, ready: bool) -> str:
+    """准备 / 取消准备的公开播报，带上进度，避免玩家以为已经全员就绪。"""
+    progress = _ready_progress(snapshot)
+    if ready:
+        return f"{player.display_name}已准备（{progress}）。"
+    return f"{player.display_name}取消准备（{progress}）。"
 
 
 def _room_ratio(snapshot: GameSnapshot) -> str:

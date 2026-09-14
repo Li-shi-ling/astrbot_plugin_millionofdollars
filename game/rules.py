@@ -213,12 +213,16 @@ def transfer(
             f"现金不足：你只有 {sender.cash} 百万美元，无法转账 {amount}。"
         )
 
+    was_ready = [player for player in snapshot.players if player.ready]
     sender.cash -= amount
     recipient.cash += amount
     _clear_ready(snapshot)
-    return [
+    events = [
         f"{sender.display_name} 转账 {amount} 百万美元给 {recipient.display_name}。"
     ]
+    if was_ready:
+        events.append("这次转账清空了准备状态，需要重新准备。")
+    return events
 
 
 def leave_slot(
