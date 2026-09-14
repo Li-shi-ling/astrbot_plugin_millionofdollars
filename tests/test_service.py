@@ -217,13 +217,14 @@ async def test_role_selection_moves_to_negotiation_and_collects_ante(
         "d": "driver",
     }
 
+    reply = start_reply
     for member in players:
         selection = selection_message(start_reply, member)
         index = [button.label for button in selection.buttons].index(
             {"driver": "司机", "brute": "暴徒", "crook": "恶棍"}[roles[member]]
         )
         token = button_token(selection.buttons[index])
-        await service.handle_token(ctx(member, f"role-{member}"), token)
+        reply = await service.handle_token(ctx(member, f"role-{member}"), token)
 
     snapshot = service._repo.load("qq_official_instance", "group-1")
     assert snapshot is not None
@@ -231,6 +232,22 @@ async def test_role_selection_moves_to_negotiation_and_collects_ante(
     assert snapshot.negotiation_started_at == 1000.0
     assert all(slot.ante_total > 0 for slot in snapshot.all_slots())
     assert sum(snapshot.public_role_counts.values()) == 3  # 4 个槽位隐藏 1 个
+    assert len(reply.reveal_cards) == 4
+    assert reply.reveal_cards.count("card_back") == 1
+    assert "## 第 1 轮 · 谈判开始" in reply.text
+    assert "**公开角色**" in reply.text
+    assert len(reply.extra) == 4
+    for player_reply in reply.extra:
+        assert player_reply.buttons
+        assert {button.label for button in player_reply.buttons} >= {
+            "转账",
+            "退出本轮",
+            "准备",
+            "查看状态",
+        }
+        target_ids = {button.only_for for button in player_reply.buttons}
+        assert len(target_ids) == 1
+        assert None not in target_ids
 
 
 async def test_three_players_choose_two_different_roles(service: GameService) -> None:

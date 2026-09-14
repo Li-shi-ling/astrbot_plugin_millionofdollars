@@ -224,3 +224,4 @@ hmac_secret.bin
 cs/
 # SQLite session 残留文件
 *.ses
+日志/

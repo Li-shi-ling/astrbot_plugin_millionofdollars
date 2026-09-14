@@ -248,7 +248,7 @@ async def send_reply(event: Any, context: QQOfficialContext, reply: Reply) -> bo
     降级为明文角色指令。图片按相对插件根目录的路径解析后逐张发送。
     """
     ok = True
-    items = [reply, *_batch_role_selection_replies(reply.extra)]
+    items = [reply, *_batch_targeted_action_replies(reply.extra)]
     base_seq = context.msg_seq
     if base_seq is None:
         base_seq = random.randint(1, max(1, 10_001 - len(items)))
@@ -264,11 +264,11 @@ async def send_reply(event: Any, context: QQOfficialContext, reply: Reply) -> bo
     return ok
 
 
-def _batch_role_selection_replies(replies: list[Reply]) -> list[Reply]:
-    """把多名玩家的专属选角按钮合并到最多五行的键盘消息中。
+def _batch_targeted_action_replies(replies: list[Reply]) -> list[Reply]:
+    """把多名玩家的专属操作按钮合并到最多五行的键盘消息中。
 
-    QQ 对同一事件的被动回复次数有限。每位玩家单发一条会让 5～8 人局的
-    最后一批按钮被平台拒绝；合并后每名玩家仍独占一行，按钮权限不变。
+    QQ 对同一事件的被动回复次数有限。选角完成时既要公开牌图又要给出
+    谈判操作，因此选角、谈判两类按钮都按玩家合并；每名玩家仍独占一行。
     """
     result: list[Reply] = []
     pending: list[Reply] = []
@@ -288,19 +288,24 @@ def _batch_role_selection_replies(replies: list[Reply]) -> list[Reply]:
                         row=row,
                     )
                 )
+        kind = _targeted_reply_kind(pending[0]) or "玩家操作"
         result.append(
             Reply(
-                text="### 秘密选角\n" + "\n".join(descriptions),
+                text=f"### {kind}\n" + "\n".join(descriptions),
                 buttons=buttons,
             )
         )
         pending.clear()
 
     for reply in replies:
-        if not _is_role_selection_reply(reply):
+        kind = _targeted_reply_kind(reply)
+        pending_kind = _targeted_reply_kind(pending[0]) if pending else None
+        if kind is None:
             flush()
             result.append(reply)
             continue
+        if pending_kind is not None and kind != pending_kind:
+            flush()
         pending_button_count = sum(len(item.buttons) for item in pending)
         if len(pending) >= MAX_ROWS or pending_button_count + len(reply.buttons) > MAX_BUTTONS:
             flush()
@@ -309,17 +314,20 @@ def _batch_role_selection_replies(replies: list[Reply]) -> list[Reply]:
     return result
 
 
-def _is_role_selection_reply(reply: Reply) -> bool:
-    return bool(
-        reply.buttons
-        and not reply.images
-        and not reply.reveal_cards
-        and not reply.extra
-        and all(
-            button.button_id.startswith("role_") and button.only_for
-            for button in reply.buttons
-        )
-    )
+def _targeted_reply_kind(reply: Reply) -> str | None:
+    if (
+        not reply.buttons
+        or reply.images
+        or reply.reveal_cards
+        or reply.extra
+        or not all(button.only_for for button in reply.buttons)
+    ):
+        return None
+    if all(button.button_id.startswith("role_") for button in reply.buttons):
+        return "秘密选角"
+    if all(button.button_id.startswith("negotiation_") for button in reply.buttons):
+        return "谈判操作"
+    return None
 
 
 async def send_image(event: Any, relative_path: str) -> bool:

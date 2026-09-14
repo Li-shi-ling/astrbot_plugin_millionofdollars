@@ -842,6 +842,11 @@ class GameService:
             if snapshot.phase is Phase.ROLE_SELECTION:
                 # 3 人局需要第二次选角：只给当前玩家重新发一组按钮
                 extra = self._role_selection_replies(snapshot, only=player)
+            else:
+                # 最后一名玩家完成选角后，立刻公开匿名中央牌堆，并把谈判
+                # 操作按玩家分行发出；不能要求玩家再手动打开菜单。
+                reveal_cards = _table_card_keys(snapshot)
+                extra = self._negotiation_action_replies(snapshot)
         elif matched.action == "snitch_choose":
             self._bump(snapshot, player)
             events = rules.resolve_snitch_designation(
@@ -1036,6 +1041,42 @@ class GameService:
                         f"{player.display_name}，请秘密选择角色"
                         f"（第 {len(chosen) + 1}/{len(player.slots)} 个）。"
                     ),
+                    buttons=buttons,
+                )
+            )
+        return replies
+
+    def _negotiation_action_replies(self, snapshot: GameSnapshot) -> list[Reply]:
+        """为每名仍在场玩家生成一行仅本人可操作的谈判按钮。"""
+        replies: list[Reply] = []
+        for player in snapshot.players:
+            if not player.has_active_slot():
+                continue
+            actions: list[tuple[str, str]] = []
+            if player.cash > 0 and len(snapshot.players) > 1:
+                actions.append(("transfer", "转账"))
+            actions.extend(
+                [
+                    ("leave", "退出本轮"),
+                    ("ready", "准备"),
+                ]
+            )
+            if player.threat_cards > 0:
+                actions.append(("threat", "使用威胁牌"))
+            actions.append(("status", "查看状态"))
+            buttons = [
+                _menu_button(
+                    f"negotiation_{action}_{player.join_order}",
+                    label,
+                    f"{MENU_COMMAND_PREFIX}{MENU_COMMAND_NAMES[f'menu_{action}']}",
+                    0,
+                    only_for=player.member_openid,
+                )
+                for action, label in actions
+            ]
+            replies.append(
+                Reply(
+                    text=f"{player.display_name}的谈判操作。",
                     buttons=buttons,
                 )
             )
@@ -1340,15 +1381,17 @@ def _public_role_text(snapshot: GameSnapshot, card: LootCard) -> str:
         for role, count in sorted(snapshot.public_role_counts.items())
     )
     bonus = (
-        f"，奖励角色：{role_label(card.bonus_role)}"
+        f"{role_label(card.bonus_role)}（成功分赃时额外获得 1 百万美元）"
         if card.bonus_role is not None
-        else ""
+        else "无"
     )
     return (
-        f"第 {snapshot.round_number} 轮赃物牌：赃款 {card.amount} 百万美元，"
-        f"保证金 {card.ante} 百万美元{bonus}。\n"
-        f"公开角色：{counts or '无'}\n"
-        "谈判开始，玩家可以在群里自行交涉，谈妥后点击准备按钮。"
+        f"## 第 {snapshot.round_number} 轮 · 谈判开始\n"
+        f"**赃款**：{card.amount} 百万美元\n"
+        f"**保证金**：每个人物 {card.ante} 百万美元\n"
+        f"**奖励角色**：{bonus}\n"
+        f"**公开角色**：{counts or '无'}\n\n"
+        "> 请直接在群里交涉，再使用自己那一行的谈判按钮。"
     )
 
 

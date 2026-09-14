@@ -418,6 +418,55 @@ async def test_send_reply_splits_eight_players_into_two_keyboards(monkeypatch) -
 
 
 @pytest.mark.asyncio
+async def test_send_reply_batches_negotiation_buttons_by_player(monkeypatch) -> None:
+    monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
+    calls: list = []
+    event = _send_event(calls)
+    context = qqofficial.QQOfficialContext(
+        platform_id="instance-1",
+        group_openid="group-1",
+        member_openid="leader",
+        display_name="首领",
+        message_id="msg-1",
+    )
+    extras = [
+        Reply(
+            text=f"玩家{player}的谈判操作。",
+            buttons=[
+                ButtonSpec(
+                    f"negotiation_{action}_{player}",
+                    label,
+                    data,
+                    only_for=f"user-{player}",
+                )
+                for action, label, data in (
+                    ("transfer", "转账", "百万美金转账"),
+                    ("leave", "退出本轮", "百万美金退出"),
+                    ("ready", "准备", "百万美金准备"),
+                    ("status", "查看状态", "百万美金状态"),
+                )
+            ],
+        )
+        for player in range(5)
+    ]
+
+    ok = await qqofficial.send_reply(event, context, Reply("谈判开始", extra=extras))
+
+    assert ok is True
+    assert len(calls) == 2
+    assert calls[1]["markdown"]["content"].startswith("### 谈判操作")
+    rows = calls[1]["keyboard"]["content"]["rows"]
+    assert len(rows) == 5
+    assert all(len(row["buttons"]) == 4 for row in rows)
+    for player, row in enumerate(rows):
+        assert all(
+            button["action"]["permission"]
+            == {"type": 0, "specify_user_ids": [f"user-{player}"]}
+            for button in row["buttons"]
+        )
+
+
+@pytest.mark.asyncio
 async def test_send_failure_does_not_leak_secret_buttons(monkeypatch) -> None:
     monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
     sent: list = []
