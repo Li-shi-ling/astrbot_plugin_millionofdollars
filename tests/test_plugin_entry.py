@@ -41,6 +41,9 @@ def main_module():
         ("百万美金创建", ("创建", "")),
         ("百万美金 开始", ("开始", "")),
         ("百万美金 状态", ("状态", "")),
+        ("百万美金 帮助", ("帮助", "")),
+        ("百万美金 规则", ("规则", "")),
+        ("百万美金规则卡", ("规则卡", "")),
         ("百万美金 菜单", ("菜单", "")),
         ("百万美金 加入", ("加入", "")),
         ("百万美金 准备", ("准备", "")),
@@ -91,6 +94,31 @@ def test_plugin_initialize_creates_data_dir_and_secret(
     secret = data_dir / main_module.SECRET_FILENAME
     assert secret.exists()
     assert len(secret.read_bytes()) == 32
+
+
+def test_help_command_returns_the_rules_card_image(main_module, monkeypatch, tmp_path) -> None:
+    """走 main.py 真实路由：帮助指令必须返回规则卡图片。"""
+    import asyncio
+
+    monkeypatch.setattr(
+        main_module.StarTools,
+        "get_data_dir",
+        classmethod(lambda cls, name=None: tmp_path / (name or "plugin")),
+    )
+    plugin = main_module.MillionsOfDollarsPlugin(SimpleNamespace(get_config=lambda: None))
+    asyncio.run(plugin.initialize())
+    request = main_module.RequestContext(
+        platform_id="qq_official_instance",
+        group_openid="group-1",
+        member_openid="user-a",
+        display_name="小明",
+        message_id="m-help",
+    )
+
+    reply = asyncio.run(plugin._dispatch("百万美金 帮助", request))
+
+    assert "规则速览" in reply.text
+    assert reply.images == ["docs/sources/rule-cards/rule-card.jpg"]
 
 
 def test_plugin_can_start_a_game_with_the_verified_deck(

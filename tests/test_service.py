@@ -516,3 +516,57 @@ async def test_full_game_reaches_game_over(tmp_path, clock) -> None:
     assert snapshot.winners
     assert snapshot.round_number <= 8
     assert all(player.cash >= 0 for player in snapshot.players)
+
+
+# ----------------------------------------------------------------------
+# 帮助与身份揭露
+# ----------------------------------------------------------------------
+
+
+async def test_help_outputs_the_rules_card(service: GameService) -> None:
+    reply = await service.help(ctx("a", "help-1"))
+
+    assert "规则速览" in reply.text
+    assert reply.images
+    for relative in reply.images:
+        assert relative == "docs/sources/rule-cards/rule-card.jpg"
+        assert service_help_path(relative).is_file()
+
+
+def service_help_path(relative: str):
+    from game import help as help_module
+
+    return help_module.resolve(relative)
+
+
+async def test_resolution_reply_carries_reveal_roles_and_skips_left_players(
+    service: GameService,
+) -> None:
+    """5 人局：d（唯一告密人）谈判期退出，揭露不应包含告密人卡。"""
+    players = ["a", "b", "c", "d", "e"]
+    start_reply = await start_game(service, players)
+    chosen = {
+        "a": "driver",
+        "b": "brute",
+        "c": "crook",
+        "d": "snitch",
+        "e": "driver",
+    }
+    labels = {"driver": "司机", "brute": "暴徒", "crook": "恶棍", "snitch": "告密人"}
+    for member in players:
+        selection = selection_message(start_reply, member)
+        index = [button.label for button in selection.buttons].index(labels[chosen[member]])
+        await service.handle_token(
+            ctx(member, f"reveal-role-{member}"), button_token(selection.buttons[index])
+        )
+
+    leave = await service.leave_menu(ctx("d", "reveal-leave-menu"))
+    await service.handle_token(ctx("d", "reveal-leave"), token_from(leave))
+
+    reply = None
+    for member in ["a", "b", "c", "e"]:
+        reply = await service.set_ready(ctx(member, f"reveal-ready-{member}"), True)
+
+    assert reply is not None
+    assert sorted(reply.reveal_roles) == ["brute", "crook", "driver"]
+    assert "snitch" not in reply.reveal_roles

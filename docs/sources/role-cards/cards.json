@@ -1,0 +1,140 @@
+{
+  "game": "Millions of Dollars",
+  "edition": "2016 / Traditional Chinese",
+  "deck_type": "Role cards + Family card",
+  "source_image": "2d7a3b80-e6d6-5aa5-afb3-414432659486.jpg",
+  "source_size": [
+    736,
+    804
+  ],
+  "grid": {
+    "columns": 3,
+    "rows": 2,
+    "x_edges": [
+      0,
+      245,
+      491,
+      736
+    ],
+    "y_edges": [
+      0,
+      402,
+      804
+    ]
+  },
+  "notes": [
+    "前 5 张为角色卡：司机、恶棍、暴徒、谋士、告密者。",
+    "最后 1 张为家族卡：The Munday Family。",
+    "颜色映射来自该游戏角色体系：绿=司机，蓝=恶棍，红=暴徒，黄=谋士，米色=告密者。"
+  ],
+  "cards": [
+    {
+      "id": 1,
+      "grid": [
+        0,
+        0
+      ],
+      "type": "role",
+      "name_en": "Driver",
+      "name_zh": "司机",
+      "color": "green",
+      "image": "cards/01_driver.jpg",
+      "crop_box": [
+        0,
+        0,
+        245,
+        402
+      ]
+    },
+    {
+      "id": 2,
+      "grid": [
+        1,
+        0
+      ],
+      "type": "role",
+      "name_en": "Crook",
+      "name_zh": "恶棍",
+      "color": "blue",
+      "image": "cards/02_crook.jpg",
+      "crop_box": [
+        245,
+        0,
+        491,
+        402
+      ]
+    },
+    {
+      "id": 3,
+      "grid": [
+        2,
+        0
+      ],
+      "type": "role",
+      "name_en": "Brute",
+      "name_zh": "暴徒",
+      "color": "red",
+      "image": "cards/03_brute.jpg",
+      "crop_box": [
+        491,
+        0,
+        736,
+        402
+      ]
+    },
+    {
+      "id": 4,
+      "grid": [
+        0,
+        1
+      ],
+      "type": "role",
+      "name_en": "Mastermind",
+      "name_zh": "谋士",
+      "color": "yellow",
+      "image": "cards/04_mastermind.jpg",
+      "crop_box": [
+        0,
+        402,
+        245,
+        804
+      ]
+    },
+    {
+      "id": 5,
+      "grid": [
+        1,
+        1
+      ],
+      "type": "role",
+      "name_en": "Snitch",
+      "name_zh": "告密者",
+      "color": "beige",
+      "image": "cards/05_snitch.jpg",
+      "crop_box": [
+        245,
+        402,
+        491,
+        804
+      ]
+    },
+    {
+      "id": 6,
+      "grid": [
+        2,
+        1
+      ],
+      "type": "family",
+      "name_en": "The Munday Family",
+      "name_zh": "蒙戴家族",
+      "color": null,
+      "image": "cards/06_the_munday_family.jpg",
+      "crop_box": [
+        491,
+        402,
+        736,
+        804
+      ]
+    }
+  ]
+}

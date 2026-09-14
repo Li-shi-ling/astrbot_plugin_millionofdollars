@@ -2,9 +2,11 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from types import SimpleNamespace
 
 import pytest
+from game import help as help_module
 from game import qqofficial
 from game.service import ButtonSpec, Reply
 
@@ -242,6 +244,7 @@ def _send_event(calls: list, failure: Exception | None = None, sent: list | None
         bot=SimpleNamespace(api=SimpleNamespace(post_group_message=fake_post)),
         send=fake_send,
         plain_result=lambda text: SimpleNamespace(message_str=text),
+        image_result=lambda path: SimpleNamespace(image_path=path),
     )
 
 
@@ -326,3 +329,126 @@ async def test_send_failure_does_not_leak_secret_buttons(monkeypatch) -> None:
     rendered = [result.message_str for result in sent]
     assert all("secret-token" not in text for text in rendered)
     assert any("按钮发送失败" in text for text in rendered)
+
+
+@pytest.mark.asyncio
+async def test_send_reveal_image_merges_roles_into_one_message(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(qqofficial, "_temp_image_path", lambda: tmp_path / "reveal.jpg")
+    sent: list = []
+    event = _send_event([], sent=sent)
+
+    ok = await qqofficial.send_reveal_image(
+        event, ["driver", "brute", "crook"]
+    )
+
+    assert ok is True
+    # 多张角色卡必须合并成一条图片消息
+    assert len(sent) == 1
+    image_path = Path(sent[0].image_path)
+    assert image_path.is_file()
+    from PIL import Image
+
+    merged = Image.open(image_path)
+    from game import help as help_module
+
+    single = Image.open(help_module.role_card_path("driver"))
+    assert merged.height >= single.height
+    assert merged.width >= single.width * 3
+
+
+@pytest.mark.asyncio
+async def test_send_reveal_image_shuffles_before_merging(monkeypatch, tmp_path) -> None:
+    """合成前必须使用打乱后的顺序，而不是固定顺序。"""
+    captured: dict = {}
+
+    def fake_shuffled(paths, rng=None):
+        return list(reversed(list(paths)))
+
+    def fake_compose(paths, output, **kwargs):
+        captured["order"] = [Path(item).name for item in paths]
+        Path(output).write_bytes(b"fake")
+        return Path(output)
+
+    monkeypatch.setattr(qqofficial, "_temp_image_path", lambda: tmp_path / "reveal.jpg")
+    monkeypatch.setattr(qqofficial.cards_module, "shuffled", fake_shuffled)
+    monkeypatch.setattr(qqofficial.cards_module, "compose_strip", fake_compose)
+
+    roles = ["driver", "brute", "crook"]
+    sent: list = []
+    ok = await qqofficial.send_reveal_image(_send_event([], sent=sent), roles)
+
+    assert ok is True
+    expected = [
+        help_module.role_card_path(role).name for role in reversed(roles)
+    ]
+    assert captured["order"] == expected
+
+
+@pytest.mark.asyncio
+async def test_send_reveal_image_falls_back_when_no_card(monkeypatch, tmp_path) -> None:
+    monkeypatch.setattr(qqofficial, "_temp_image_path", lambda: tmp_path / "x.jpg")
+    sent: list = []
+    event = _send_event([], sent=sent)
+
+    ok = await qqofficial.send_reveal_image(event, ["unknown-role"])
+
+    assert ok is False
+    assert sent == []
+
+
+@pytest.mark.asyncio
+async def test_send_reply_sends_rule_card_then_text(monkeypatch) -> None:
+    monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
+    calls: list = []
+    sent: list = []
+    event = _send_event(calls, sent=sent)
+    context = qqofficial.QQOfficialContext(
+        platform_id="instance-1",
+        group_openid="group-1",
+        member_openid="user-a",
+        display_name="小明",
+        message_id="msg-1",
+    )
+    reply = Reply(
+        text="规则速览",
+        images=["docs/sources/rule-cards/rule-card.jpg"],
+    )
+
+    ok = await qqofficial.send_reply(event, context, reply)
+
+    assert ok is True
+    assert len(sent) == 1
+    assert "rule-card.jpg" in sent[0].image_path
+    assert len(calls) == 1
+    assert calls[0]["content"] == "规则速览"
+
+
+@pytest.mark.asyncio
+async def test_send_reply_with_reveal_roles_sends_one_image_plus_text(
+    monkeypatch, tmp_path
+) -> None:
+    monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
+    monkeypatch.setattr(qqofficial, "_temp_image_path", lambda: tmp_path / "reveal.jpg")
+    calls: list = []
+    sent: list = []
+    event = _send_event(calls, sent=sent)
+    context = qqofficial.QQOfficialContext(
+        platform_id="instance-1",
+        group_openid="group-1",
+        member_openid="user-a",
+        display_name="小明",
+        message_id="msg-1",
+    )
+    reply = Reply(
+        text="抢劫结算：司机×2 全部淘汰。",
+        reveal_roles=["driver", "brute"],
+    )
+
+    ok = await qqofficial.send_reply(event, context, reply)
+
+    assert ok is True
+    assert len(sent) == 1  # 两张角色卡合并成一条图片消息
+    assert len(calls) == 1
+    assert "司机×2" in calls[0]["content"]

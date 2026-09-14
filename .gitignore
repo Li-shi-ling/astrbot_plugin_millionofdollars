@@ -221,3 +221,6 @@ hmac_secret.bin
 
 # 牌面核验用的临时参考目录（内容已归档到 docs/sources/loot-cards/）
 参考/
+
+# SQLite session 残留文件
+*.ses

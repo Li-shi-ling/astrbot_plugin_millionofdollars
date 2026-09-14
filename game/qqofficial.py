@@ -16,13 +16,20 @@
 from __future__ import annotations
 
 import random
+import secrets
+import tempfile
+import uuid
 from dataclasses import dataclass
+from pathlib import Path
 from typing import Any
 
 import botpy.message as botpy_message
 
 from astrbot.api import logger
 
+from . import cards as cards_module
+from . import help as help_module
+from .models import role_label
 from .service import ButtonSpec, Reply
 
 QQOFFICIAL_PLATFORMS = {"qq_official", "qq_official_webhook"}
@@ -163,13 +170,78 @@ async def send_reply(event: Any, context: QQOfficialContext, reply: Reply) -> bo
     """发送一条回复及其附带消息。
 
     返回是否全部发送成功。附带消息（秘密按钮）发送失败时必须提示重试，不得
-    降级为明文角色指令。
+    降级为明文角色指令。图片按相对插件根目录的路径解析后逐张发送。
     """
     ok = True
     for index, item in enumerate([reply, *reply.extra]):
         sent = await _send_single(event, context, item, extra=index > 0)
         ok = ok and sent
     return ok
+
+
+async def send_image(event: Any, relative_path: str) -> bool:
+    """通过 AstrBot 的消息链路发送一张本地图片。"""
+    path = help_module.resolve(relative_path)
+    if not path.is_file():
+        logger.warning("[百万美金] 图片不存在，跳过发送：%s", path)
+        return False
+    return await _send_image_file(event, path)
+
+
+async def send_reveal_image(
+    event: Any,
+    roles: list[str],
+    *,
+    rng: secrets.SystemRandom | None = None,
+) -> bool:
+    """身份揭露：把本轮参与抢劫的角色卡随机排序后合并成一张图片发送。"""
+    paths = [
+        path
+        for path in (help_module.role_card_path(role) for role in roles)
+        if path is not None and path.is_file()
+    ]
+    if not paths:
+        logger.warning("[百万美金] 没有可发送的角色卡：%s", roles)
+        return False
+    # 顺序必须打乱，避免固定顺序暗示玩家与角色的对应关系
+    ordered = cards_module.shuffled(paths, rng)
+    labels = [_role_label_for_path(path) for path in ordered]
+
+    output = _temp_image_path()
+    try:
+        cards_module.compose_strip(ordered, output, labels=labels)
+    except Exception as exc:  # noqa: BLE001 - 合成失败时逐张退化为不发送
+        logger.warning("[百万美金] 角色卡合成失败：%s", exc)
+        return False
+    return await _send_image_file(event, output)
+
+
+def _role_label_for_path(path: Path) -> str:
+    for role, relative in help_module.ROLE_CARD_PATHS.items():
+        if help_module.resolve(relative) == path:
+            return role_label(role)
+    return ""
+
+
+def _temp_image_path() -> Path:
+    try:
+        from astrbot.core.utils.astrbot_path import get_astrbot_temp_path
+
+        base = Path(get_astrbot_temp_path())
+    except Exception:  # pragma: no cover - 平台无关兜底
+        base = Path(tempfile.gettempdir())
+    base.mkdir(parents=True, exist_ok=True)
+    return base / f"millionofdollars_reveal_{uuid.uuid4().hex[:12]}.jpg"
+
+
+async def _send_image_file(event: Any, path: Path) -> bool:
+    try:
+        await event.send(event.image_result(str(path)))
+        logger.info("[百万美金] 已发送图片：%s", path.name)
+        return True
+    except Exception as exc:  # noqa: BLE001 - 图片发送失败不应影响文本流程
+        logger.warning("[百万美金] 图片发送失败 %s：%s", path.name, exc)
+        return False
 
 
 async def _send_single(
@@ -179,6 +251,11 @@ async def _send_single(
     *,
     extra: bool,
 ) -> bool:
+    for relative_path in reply.images:
+        await send_image(event, relative_path)
+    if reply.reveal_roles:
+        await send_reveal_image(event, reply.reveal_roles)
+
     payload = build_payload(reply)
     add_passive_reply_context(
         payload,

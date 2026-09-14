@@ -44,7 +44,7 @@ MENU_TEXT = (
     "3～8 人桌游。所有按钮都等价于一条文本指令。\n\n"
     "百万美金 创建 / 加入 / 开始 / 状态 / 菜单\n"
     "百万美金 转账 / 退出 / 准备 / 取消准备\n"
-    "百万美金 使用威胁牌 / 强制抢劫"
+    "百万美金 使用威胁牌 / 强制抢劫 / 帮助（规则卡）"
 )
 
 _KNOWN_SUBCOMMANDS = (
@@ -52,6 +52,8 @@ _KNOWN_SUBCOMMANDS = (
     "强制抢劫",
     "使用威胁牌",
     "威胁牌",
+    "规则卡",
+    "规则",
     "创建",
     "加入",
     "开始",
@@ -65,7 +67,7 @@ _KNOWN_SUBCOMMANDS = (
 )
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.5.0")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.6.0")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
@@ -139,8 +141,10 @@ class MillionsOfDollarsPlugin(Star):
 
         subcommand, argument = _parse_command(message_str)
 
-        if subcommand in {"", "菜单", "帮助"}:
+        if subcommand in {"", "菜单"}:
             return await service.menu(request)
+        if subcommand in {"帮助", "规则", "规则卡", "help"}:
+            return await service.help(request)
         if subcommand == "创建":
             return await service.create(request)
         if subcommand == "加入":

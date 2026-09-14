@@ -15,6 +15,7 @@ from collections.abc import Callable, Sequence
 from dataclasses import dataclass, field
 from typing import Any
 
+from . import help as help_module
 from . import loot as loot_module
 from . import rules
 from .models import (
@@ -71,6 +72,12 @@ class Reply:
 
     text: str
     buttons: list[ButtonSpec] = field(default_factory=list)
+    images: list[str] = field(default_factory=list)
+    """相对插件根目录的图片路径，按顺序在文本之前发送。"""
+
+    reveal_roles: list[str] = field(default_factory=list)
+    """身份揭露的角色键；适配层会打乱顺序并合并成一张图片发送。"""
+
     extra: list[Reply] = field(default_factory=list)
     """需要额外发送的消息（例如每位玩家各自的秘密按钮）。"""
 
@@ -78,6 +85,8 @@ class Reply:
         return {
             "text": self.text,
             "buttons": [button.to_dict() for button in self.buttons],
+            "images": list(self.images),
+            "reveal_roles": list(self.reveal_roles),
             "extra": [item.to_dict() for item in self.extra],
         }
 
@@ -88,6 +97,8 @@ class Reply:
             buttons=[
                 ButtonSpec.from_dict(item) for item in data.get("buttons", [])
             ],
+            images=[str(item) for item in data.get("images", [])],
+            reveal_roles=[str(item) for item in data.get("reveal_roles", [])],
             extra=[Reply.from_dict(item) for item in data.get("extra", [])],
         )
 
@@ -147,7 +158,7 @@ class GameService:
                 "3～8 人的银行抢劫桌游。所有操作也可以直接发送文本指令。\n\n"
                 "百万美金 创建 / 加入 / 开始 / 状态\n"
                 "百万美金 转账 / 退出 / 准备 / 取消准备\n"
-                "百万美金 使用威胁牌 / 强制抢劫"
+                "百万美金 使用威胁牌 / 强制抢劫 / 帮助"
             ),
             buttons=[
                 _public_button("menu_create", "创建", "百万美金创建"),
@@ -269,6 +280,15 @@ class GameService:
                     extra=self._role_selection_replies(snapshot),
                 )
                 return self._store(conn, ctx, reply)
+
+    async def help(self, ctx: RequestContext) -> Reply:
+        """帮助接口：输出规则卡图片与规则速览。"""
+        card = help_module.rules_card_path()
+        images = [help_module.RULES_CARD.relative_path] if card.is_file() else []
+        text = help_module.HELP_TEXT
+        if not images:
+            text += "\n\n（规则卡图片缺失，请联系管理员检查插件文件。）"
+        return Reply(text=text, images=images)
 
     async def status(self, ctx: RequestContext) -> Reply:
         async with self._lock_for(ctx.platform_id, ctx.group_openid):
@@ -432,12 +452,15 @@ class GameService:
 
                 player.ready = ready
                 events = [f"{player.display_name} {'已准备' if ready else '取消准备'}。"]
+                reveal_roles: list[str] = []
                 if ready and _all_ready(snapshot):
                     events.append("全员准备完毕，立即结算本轮抢劫。")
-                    events.extend(self._resolve(snapshot))
+                    resolved, reveal_roles = self._resolve(snapshot)
+                    events.extend(resolved)
                 self._repo.store_snapshot(conn, snapshot)
                 reply = Reply(
                     text="\n".join(events),
+                    reveal_roles=reveal_roles,
                     extra=self._post_resolution_replies(snapshot),
                 )
                 return self._store(conn, ctx, reply)
@@ -467,12 +490,17 @@ class GameService:
                     )
 
                 snapshot.force_rob_used = True
-                events = ["首领强制结束谈判，立即进入抢劫结算。", *self._resolve(snapshot)]
+                resolved, reveal_roles = self._resolve(snapshot)
+                events = ["首领强制结束谈判，立即进入抢劫结算。", *resolved]
                 self._repo.store_snapshot(conn, snapshot)
                 return self._store(
                     conn,
                     ctx,
-                    Reply(text="\n".join(events), extra=self._post_resolution_replies(snapshot)),
+                    Reply(
+                        text="\n".join(events),
+                        reveal_roles=reveal_roles,
+                        extra=self._post_resolution_replies(snapshot),
+                    ),
                 )
 
     async def threat_card_menu(self, ctx: RequestContext) -> Reply:
@@ -546,12 +574,16 @@ class GameService:
                         Reply("操作已失效或无权执行，请重新点击按钮。"),
                     )
 
-                events, extra = self._apply(snapshot, player, matched)
+                events, extra, reveal_roles = self._apply(snapshot, player, matched)
                 self._repo.store_snapshot(conn, snapshot)
                 return self._store(
                     conn,
                     ctx,
-                    Reply(text="\n".join(events), extra=extra),
+                    Reply(
+                        text="\n".join(events),
+                        reveal_roles=reveal_roles,
+                        extra=extra,
+                    ),
                 )
 
     # ------------------------------------------------------------------
@@ -601,8 +633,9 @@ class GameService:
         snapshot: GameSnapshot,
         player: Player,
         matched: TokenAction,
-    ) -> tuple[list[str], list[Reply]]:
+    ) -> tuple[list[str], list[Reply], list[str]]:
         extra: list[Reply] = []
+        reveal_roles: list[str] = []
         if matched.action == "choose_role":
             events = self._apply_choose_role(snapshot, player, Role(matched.params["role"]))
             if snapshot.phase is Phase.ROLE_SELECTION:
@@ -613,7 +646,8 @@ class GameService:
             events = rules.resolve_snitch_designation(
                 snapshot, Role(matched.params["role"])
             )
-            events.extend(self._resolve(snapshot))
+            resolved, reveal_roles = self._resolve(snapshot)
+            events.extend(resolved)
             extra = self._post_resolution_replies(snapshot)
         elif matched.action == "transfer":
             self._bump(snapshot, player)
@@ -637,16 +671,18 @@ class GameService:
             events = [f"{player.display_name} {'已准备' if ready else '取消准备'}。"]
             if ready and _all_ready(snapshot):
                 events.append("全员准备完毕，立即结算本轮抢劫。")
-                events.extend(self._resolve(snapshot))
+                resolved, reveal_roles = self._resolve(snapshot)
+                events.extend(resolved)
                 extra = self._post_resolution_replies(snapshot)
         elif matched.action == "force_rob":
             self._bump(snapshot, player)
             snapshot.force_rob_used = True
-            events = ["首领强制结束谈判，立即进入抢劫结算。", *self._resolve(snapshot)]
+            resolved, reveal_roles = self._resolve(snapshot)
+            events = ["首领强制结束谈判，立即进入抢劫结算。", *resolved]
             extra = self._post_resolution_replies(snapshot)
         else:  # pragma: no cover - 枚举与派发必须保持一致
             raise RuleError(f"未实现的动作：{matched.action}")
-        return events, extra
+        return events, extra, reveal_roles
 
     def _apply_choose_role(
         self,
@@ -680,13 +716,20 @@ class GameService:
             events.append("请等待其他玩家提交。")
         return events
 
-    def _resolve(self, snapshot: GameSnapshot) -> list[str]:
+    def _resolve(self, snapshot: GameSnapshot) -> tuple[list[str], list[str]]:
+        """结算抢劫。
+
+        返回 ``(公开事件, 身份揭露角色)``。角色在开始结算前采集，因此包含
+        本轮参与抢劫的全部角色（含被淘汰的），不含谈判期已退出的槽位。
+        """
+        reveal_roles = help_module.reveal_roles(_participating_roles(snapshot))
         events = rules.resolve_heist_roles(snapshot)
         if snapshot.phase is Phase.SNITCH_SELECTION:
-            return events
+            # 还要等告密人指定角色，身份揭露留到本轮真正结算时再发
+            return events, []
         events.extend(rules.finish_resolving(snapshot))
         events.extend(self._finish_round(snapshot))
-        return events
+        return events, reveal_roles
 
     def _finish_round(self, snapshot: GameSnapshot) -> list[str]:
         winners = rules.evaluate_victory(snapshot)
@@ -843,6 +886,21 @@ def _token_context(snapshot: GameSnapshot, player: Player) -> TokenContext:
         generation=player.action_generation,
         actor_openid=player.member_openid,
     )
+
+
+def _participating_roles(snapshot: GameSnapshot) -> list[Role]:
+    """本轮参与抢劫的角色。
+
+    槽位 ``active`` 或 ``eliminated`` 都表示参与过本轮抢劫；谈判期主动退出的
+    槽位两者皆否（角色仍保密，不得公开）。
+    """
+    roles: list[Role] = []
+    for slot in snapshot.all_slots():
+        if slot.role is None:
+            continue
+        if slot.active or slot.eliminated:
+            roles.append(slot.role)
+    return roles
 
 
 def _all_roles_chosen(snapshot: GameSnapshot) -> bool:
