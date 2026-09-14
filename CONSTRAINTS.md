@@ -8,3 +8,4 @@
 6. `README.md` 和 `metadata.yaml` 中用于展示给用户的内容必须保持中文。
 7. 每次更改后必须运行 `python scripts/package_plugin.py`，生成对应版本的 AstrBot 本地安装 zip 压缩包，方便本地安装验证。
 8. 所有代码修改必须仅限于当前插件目录，不修改 AstrBot 源码。
+9. 每个版本更新要进行对应的git提交
