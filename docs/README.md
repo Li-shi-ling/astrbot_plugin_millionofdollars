@@ -14,6 +14,8 @@
 
 另归档 [2024 二版英文规则书 PDF](./sources/millions-of-dollars-2024-rulebook-en.pdf)，仅供版本对照，不应与初版规则混用。
 
+《百万美金》10 张赃物牌的实物牌面截图归档在 [sources/loot-cards](./sources/loot-cards/)，核验方法与结果见[赃物牌组核验记录](./loot-deck-verification.md)。
+
 ## 来源
 
 - 2016 初版英文规则书：<https://desktopgames.com.ua/games/2566/millions_of_dollars_rules_en.pdf>

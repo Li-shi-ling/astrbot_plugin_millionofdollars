@@ -1,0 +1,263 @@
+{
+  "game": "Millions of Dollars",
+  "edition": "2016 / Traditional Chinese",
+  "source_image": "89615705-8ad5-42fe-ba4a-810905cdca75.jpg",
+  "source_size": [
+    1080,
+    1200
+  ],
+  "grid": {
+    "columns": 4,
+    "rows": 3,
+    "cell_width": 270,
+    "cell_height": 400
+  },
+  "unit": "million_dollars",
+  "role_color_map": {
+    "red": {
+      "role": "Brute",
+      "zh": "暴徒"
+    },
+    "green": {
+      "role": "Driver",
+      "zh": "司机"
+    },
+    "blue": {
+      "role": "Crook",
+      "zh": "恶棍"
+    },
+    "beige": {
+      "role": "Snitch",
+      "zh": "告密者"
+    },
+    "none": {
+      "role": null,
+      "zh": null
+    }
+  },
+  "cards": [
+    {
+      "id": 1,
+      "grid": [
+        0,
+        0
+      ],
+      "name_en": "Las Vegas Casino",
+      "name_zh": "拉斯维加斯赌场",
+      "loot_million": 10,
+      "ante_million": 2,
+      "bonus_role": "Brute",
+      "bonus_role_zh": "暴徒",
+      "role_color": "red",
+      "crop_box": [
+        0,
+        0,
+        270,
+        400
+      ],
+      "image": "cards/01_las_vegas_casino.jpg"
+    },
+    {
+      "id": 2,
+      "grid": [
+        1,
+        0
+      ],
+      "name_en": "Royal Casino",
+      "name_zh": "皇家赌场",
+      "loot_million": 10,
+      "ante_million": 2,
+      "bonus_role": "Snitch",
+      "bonus_role_zh": "告密者",
+      "role_color": "beige",
+      "crop_box": [
+        270,
+        0,
+        540,
+        400
+      ],
+      "image": "cards/02_royal_casino.jpg"
+    },
+    {
+      "id": 3,
+      "grid": [
+        2,
+        0
+      ],
+      "name_en": "National Bank",
+      "name_zh": "国家银行",
+      "loot_million": 9,
+      "ante_million": 1,
+      "bonus_role": "Crook",
+      "bonus_role_zh": "恶棍",
+      "role_color": "blue",
+      "crop_box": [
+        540,
+        0,
+        810,
+        400
+      ],
+      "image": "cards/03_national_bank.jpg"
+    },
+    {
+      "id": 4,
+      "grid": [
+        3,
+        0
+      ],
+      "name_en": "General State Bank",
+      "name_zh": "州际银行",
+      "loot_million": 9,
+      "ante_million": 1,
+      "bonus_role": "Brute",
+      "bonus_role_zh": "暴徒",
+      "role_color": "red",
+      "crop_box": [
+        810,
+        0,
+        1080,
+        400
+      ],
+      "image": "cards/04_general_state_bank.jpg"
+    },
+    {
+      "id": 5,
+      "grid": [
+        0,
+        1
+      ],
+      "name_en": "Central Bank",
+      "name_zh": "中央银行",
+      "loot_million": 9,
+      "ante_million": 1,
+      "bonus_role": "Driver",
+      "bonus_role_zh": "司机",
+      "role_color": "green",
+      "crop_box": [
+        0,
+        400,
+        270,
+        800
+      ],
+      "image": "cards/05_central_bank.jpg"
+    },
+    {
+      "id": 6,
+      "grid": [
+        1,
+        1
+      ],
+      "name_en": "Bank of the City",
+      "name_zh": "城市银行",
+      "loot_million": 8,
+      "ante_million": 1,
+      "bonus_role": "Snitch",
+      "bonus_role_zh": "告密者",
+      "role_color": "beige",
+      "crop_box": [
+        270,
+        400,
+        540,
+        800
+      ],
+      "image": "cards/06_bank_of_the_city.jpg"
+    },
+    {
+      "id": 7,
+      "grid": [
+        2,
+        1
+      ],
+      "name_en": "Bank of the County",
+      "name_zh": "县级银行",
+      "loot_million": 8,
+      "ante_million": 1,
+      "bonus_role": "Crook",
+      "bonus_role_zh": "恶棍",
+      "role_color": "blue",
+      "crop_box": [
+        540,
+        400,
+        810,
+        800
+      ],
+      "image": "cards/07_bank_of_the_county.jpg"
+    },
+    {
+      "id": 8,
+      "grid": [
+        3,
+        1
+      ],
+      "name_en": "Rural District Bank",
+      "name_zh": "农村信用社",
+      "loot_million": 8,
+      "ante_million": 1,
+      "bonus_role": "Driver",
+      "bonus_role_zh": "司机",
+      "role_color": "green",
+      "crop_box": [
+        810,
+        400,
+        1080,
+        800
+      ],
+      "image": "cards/08_rural_district_bank.jpg"
+    },
+    {
+      "id": 9,
+      "grid": [
+        0,
+        2
+      ],
+      "name_en": "Fort Knox",
+      "name_zh": "诺克斯堡金库",
+      "loot_million": 12,
+      "ante_million": 2,
+      "bonus_role": null,
+      "bonus_role_zh": null,
+      "role_color": null,
+      "crop_box": [
+        0,
+        800,
+        270,
+        1200
+      ],
+      "image": "cards/09_fort_knox.jpg"
+    },
+    {
+      "id": 10,
+      "grid": [
+        1,
+        2
+      ],
+      "name_en": "First Bank",
+      "name_zh": "第一银行",
+      "loot_million": 8,
+      "ante_million": 1,
+      "bonus_role": "Brute",
+      "bonus_role_zh": "暴徒",
+      "role_color": "red",
+      "crop_box": [
+        270,
+        800,
+        540,
+        1200
+      ],
+      "image": "cards/10_first_bank.jpg"
+    }
+  ],
+  "card_back": {
+    "grid": [
+      3,
+      2
+    ],
+    "crop_box": [
+      810,
+      800,
+      1080,
+      1200
+    ],
+    "image": "card_back.jpg"
+  }
+}

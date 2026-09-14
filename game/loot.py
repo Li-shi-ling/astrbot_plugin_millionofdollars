@@ -3,17 +3,16 @@
 设计依据：``docs/game-implementation-design.md`` 第 4.3 节。
 
 原版包含 10 张赃物牌，开局无放回抽取 8 张。规则正文只公开了金额区间
-（800 万～1200 万）与保证金取值（100 万或 200 万），**没有逐张牌面**；归档的
-2016 英文规则书 PDF 只包含组件示意图，不含牌面数值。
+（800 万～1200 万）与保证金取值（100 万或 200 万），没有逐张牌面；
+归档的 2016 英文规则书 PDF 只有 4 页且只含组件示意图。
 
-因此本模块遵守设计约束：
+牌面数据来自实物牌逐张截图（``docs/sources/loot-cards/``），核验方式：
 
-* 不凭区间臆造牌面；
-* 牌组必须逐张核验后才能启用，未核验时 ``build_deck`` 抛
-  :class:`DeckNotVerifiedError`；
-* 录入牌面时必须同时补 :data:`LOOT_DECK_SOURCE_INDEX` 的来源索引。
+* 金额与保证金：对每张卡的大号数字区域逐位放大比对；
+* 奖励角色：读取牌面角色符号区的色相（红=暴徒、绿=司机、蓝=恶棍、米黄=告密者）。
 
-替换步骤见 ``README.md`` 的"赃物牌组核验"一节。
+逐张核验结果由 ``tests/test_loot_deck.py`` 固定，参考实现见
+``docs/loot-deck-verification.md``。
 """
 
 from __future__ import annotations
@@ -37,14 +36,46 @@ class DeckNotVerifiedError(RuntimeError):
     """牌组尚未逐张核验，不能开局。"""
 
 
-LOOT_DECK_VERIFIED = False
+LOOT_DECK_VERIFIED = True
 """牌面是否已逐张核验。核验完成后必须置为 ``True``。"""
 
-LOOT_DECK_SOURCE_INDEX: tuple[str, ...] = ()
-"""逐张牌面的来源索引（截图名/页码/实物编号），长度必须等于牌组长度。"""
+# 逐张核验的 10 张牌面：card_id 为稳定编号，注释里保留原版银行名便于对账。
+# 金额/保证金来自实物牌正面大号数字，bonus_role 来自牌面角色符号颜色。
+LOOT_CARD_DATA: tuple[dict[str, object], ...] = (
+    # 01 拉斯维加斯赌场 LAS VEGAS CASINO
+    {"card_id": "loot-01", "amount": 10, "ante": 2, "bonus_role": Role.BRUTE},
+    # 02 皇家赌场 ROYAL CASINO
+    {"card_id": "loot-02", "amount": 10, "ante": 2, "bonus_role": Role.SNITCH},
+    # 03 国家银行 NATIONAL BANK
+    {"card_id": "loot-03", "amount": 9, "ante": 1, "bonus_role": Role.CROOK},
+    # 04 州际银行 GENERAL STATE BANK
+    {"card_id": "loot-04", "amount": 9, "ante": 1, "bonus_role": Role.BRUTE},
+    # 05 中央银行 CENTRAL BANK
+    {"card_id": "loot-05", "amount": 9, "ante": 1, "bonus_role": Role.DRIVER},
+    # 06 城市银行 BANK OF THE CITY
+    {"card_id": "loot-06", "amount": 8, "ante": 1, "bonus_role": Role.SNITCH},
+    # 07 县级银行 BANK OF THE COUNTY
+    {"card_id": "loot-07", "amount": 8, "ante": 1, "bonus_role": Role.CROOK},
+    # 08 农村信用社 RURAL DISTRICT BANK
+    {"card_id": "loot-08", "amount": 8, "ante": 1, "bonus_role": Role.DRIVER},
+    # 09 诺克斯堡金库 FORT KNOX（牌面无角色符号）
+    {"card_id": "loot-09", "amount": 12, "ante": 2, "bonus_role": None},
+    # 10 第一银行 FIRST BANK
+    {"card_id": "loot-10", "amount": 8, "ante": 1, "bonus_role": Role.BRUTE},
+)
 
-LOOT_CARD_DATA: tuple[dict[str, object], ...] = ()
-"""牌面常量。每项形如 ``{"card_id": ..., "amount": ..., "ante": ..., "bonus_role": ...}``。"""
+LOOT_DECK_SOURCE_INDEX: tuple[str, ...] = (
+    "loot-01: docs/sources/loot-cards/cards/01_las_vegas_casino.jpg",
+    "loot-02: docs/sources/loot-cards/cards/02_royal_casino.jpg",
+    "loot-03: docs/sources/loot-cards/cards/03_national_bank.jpg",
+    "loot-04: docs/sources/loot-cards/cards/04_general_state_bank.jpg",
+    "loot-05: docs/sources/loot-cards/cards/05_central_bank.jpg",
+    "loot-06: docs/sources/loot-cards/cards/06_bank_of_the_city.jpg",
+    "loot-07: docs/sources/loot-cards/cards/07_bank_of_the_county.jpg",
+    "loot-08: docs/sources/loot-cards/cards/08_rural_district_bank.jpg",
+    "loot-09: docs/sources/loot-cards/cards/09_fort_knox.jpg",
+    "loot-10: docs/sources/loot-cards/cards/10_first_bank.jpg",
+)
 
 
 def validate_deck(entries: Sequence[dict[str, object]]) -> tuple[LootCard, ...]:

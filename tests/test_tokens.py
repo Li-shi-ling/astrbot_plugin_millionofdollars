@@ -163,14 +163,19 @@ def test_validate_deck_rejects_invalid_data(mutate) -> None:
         loot.validate_deck(mutate(valid_entries()))
 
 
-def test_builtin_deck_is_not_verified_yet() -> None:
+def test_unverified_deck_is_rejected(monkeypatch) -> None:
     """牌面尚未逐张核验时不得开局。"""
-    if loot.LOOT_DECK_VERIFIED:
-        pytest.skip("牌组已核验，该约束不再适用。")
+    monkeypatch.setattr(loot, "LOOT_DECK_VERIFIED", False)
     with pytest.raises(loot.DeckNotVerifiedError):
         loot.build_deck()
     with pytest.raises(loot.DeckNotVerifiedError):
         loot.draw_loot()
+
+
+def test_source_index_mismatch_is_rejected(monkeypatch) -> None:
+    monkeypatch.setattr(loot, "LOOT_DECK_SOURCE_INDEX", ())
+    with pytest.raises(loot.DeckNotVerifiedError):
+        loot.build_deck()
 
 
 def test_draw_loot_takes_eight_unique_cards() -> None:

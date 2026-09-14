@@ -28,12 +28,23 @@
 
 ## 当前可玩状态
 
-游戏逻辑已完成并通过测试，但**赃物牌组尚未逐张核验**，因此 `百万美金 开始`
-会提示“暂时无法开局”。
+游戏逻辑与赃物牌组均已完成，可以直接开局。10 张赃物牌的牌面取自实物牌截图并
+逐张核验，核验方法与结果见[赃物牌组核验记录](./docs/loot-deck-verification.md)。
 
-原版 10 张赃物牌的具体牌面没有出现在归档的规则书 PDF 中，
-设计文档第 4.3 节禁止凭取值范围臆造牌面。核验步骤见
-[赃物牌组核验](./docs/loot-deck-verification.md)。
+| 编号 | 名称 | 赃款 | 保证金 | 奖励角色 |
+| --- | --- | --- | --- | --- |
+| loot-01 | 拉斯维加斯赌场 | 10 | 2 | 暴徒 |
+| loot-02 | 皇家赌场 | 10 | 2 | 告密者 |
+| loot-03 | 国家银行 | 9 | 1 | 恶棍 |
+| loot-04 | 州际银行 | 9 | 1 | 暴徒 |
+| loot-05 | 中央银行 | 9 | 1 | 司机 |
+| loot-06 | 城市银行 | 8 | 1 | 告密者 |
+| loot-07 | 县级银行 | 8 | 1 | 恶棍 |
+| loot-08 | 农村信用社 | 8 | 1 | 司机 |
+| loot-09 | 诺克斯堡金库 | 12 | 2 | 无 |
+| loot-10 | 第一银行 | 8 | 1 | 暴徒 |
+
+每局从这 10 张中无放回抽取 8 张，逐轮翻开。
 
 ## 规则文档
 
@@ -41,7 +52,7 @@
 - [资料来源与版本说明](./docs/README.md)
 - [QQ 官方 Bot 开发说明](./docs/qqofficial-bot-development.md)
 - [QQ 官方 Bot 游戏开发实现设计](./docs/game-implementation-design.md)
-- [赃物牌组核验](./docs/loot-deck-verification.md)
+- [赃物牌组核验记录](./docs/loot-deck-verification.md)
 - [2016 初版英文规则书 PDF](./docs/sources/millions-of-dollars-2016-rulebook-en.pdf)
 - [2024 二版英文规则书 PDF](./docs/sources/millions-of-dollars-2024-rulebook-en.pdf)
 
@@ -66,6 +77,7 @@ astrbot_plugin_millionofdollars/
     ├── test_repository.py
     ├── test_service.py
     ├── test_qqofficial.py
+    ├── test_loot_deck.py
     └── test_plugin_entry.py
 ```
 

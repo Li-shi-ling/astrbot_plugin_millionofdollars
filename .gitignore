@@ -218,3 +218,6 @@ dist/
 *.sqlite3-wal
 *.sqlite3-shm
 hmac_secret.bin
+
+# 牌面核验用的临时参考目录（内容已归档到 docs/sources/loot-cards/）
+参考/

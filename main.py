@@ -65,7 +65,7 @@ _KNOWN_SUBCOMMANDS = (
 )
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.4.0")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.5.0")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)

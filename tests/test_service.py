@@ -420,3 +420,99 @@ async def test_full_round_reaches_resolution_and_next_round(
     assert snapshot.players[1].threat_cards == 1  # 唯一暴徒保留威胁牌到下一轮
     assert snapshot.round_number == 2
     assert snapshot.phase is Phase.ROLE_SELECTION
+
+
+async def test_full_round_with_the_verified_deck(tmp_path, clock) -> None:
+    """使用真实已核验牌组跑完一整轮（保证金可能为 2 百万美元）。"""
+    repository = GameRepository(tmp_path / "real.sqlite3")
+    repository.initialize()
+    service = GameService(
+        repository,
+        TokenSigner(SECRET),
+        now=clock,
+        rng=random.Random(2026),
+    )
+
+    players = ["a", "b", "c", "d"]
+    start_reply = await start_game(service, players)
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert len(snapshot.loot_deck) == 8
+    assert len({card.card_id for card in snapshot.loot_deck}) == 8
+    assert all(card.amount in {8, 9, 10, 12} for card in snapshot.loot_deck)
+    ante = snapshot.current_loot.ante
+    assert ante in {1, 2}
+
+    labels = {"driver": "司机", "brute": "暴徒", "crook": "恶棍"}
+    chosen = {"a": "driver", "b": "brute", "c": "crook", "d": "driver"}
+    for member in players:
+        selection = selection_message(start_reply, member)
+        index = [button.label for button in selection.buttons].index(labels[chosen[member]])
+        await service.handle_token(
+            ctx(member, f"real-role-{member}"), button_token(selection.buttons[index])
+        )
+
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert snapshot.phase is Phase.NEGOTIATION
+    assert all(slot.ante_total == ante for slot in snapshot.all_slots())
+
+    for member in players:
+        await service.set_ready(ctx(member, f"real-ready-{member}"), True)
+
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert snapshot.phase in {Phase.ROLE_SELECTION, Phase.GAME_OVER}
+    assert all(player.cash >= 0 for player in snapshot.players)
+
+
+async def test_full_game_reaches_game_over(tmp_path, clock) -> None:
+    """用真实牌组连续跑到第 8 回合结束，验证轮次循环与胜利判定。"""
+    repository = GameRepository(tmp_path / "loop.sqlite3")
+    repository.initialize()
+    service = GameService(
+        repository,
+        TokenSigner(SECRET),
+        now=clock,
+        rng=random.Random(99),
+    )
+
+    players = ["a", "b", "c", "d"]
+    await start_game(service, players)
+    labels = {"driver": "司机", "brute": "暴徒", "crook": "恶棍"}
+    plan = {"a": "driver", "b": "brute", "c": "crook", "d": "driver"}
+
+    for round_index in range(12):
+        snapshot = service._repo.load("qq_official_instance", "group-1")
+        assert snapshot is not None
+        if snapshot.phase is Phase.GAME_OVER:
+            break
+
+        # 每位玩家的选角按钮是各自独立的秘密消息，逐个取回
+        for member in players:
+            snapshot = service._repo.load("qq_official_instance", "group-1")
+            assert snapshot is not None
+            selection = next(
+                item
+                for item in service._role_selection_replies(snapshot)
+                if item.buttons and item.buttons[0].only_for == member
+            )
+            index = [button.label for button in selection.buttons].index(labels[plan[member]])
+            token = button_token(selection.buttons[index])
+            await service.handle_token(
+                ctx(member, f"loop-{round_index}-role-{member}"), token
+            )
+
+        for member in players:
+            await service.set_ready(
+                ctx(member, f"loop-{round_index}-ready-{member}"), True
+            )
+    else:  # pragma: no cover - 12 轮内必然结束
+        raise AssertionError("游戏没有在第 8 回合结束")
+
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert snapshot.phase is Phase.GAME_OVER
+    assert snapshot.winners
+    assert snapshot.round_number <= 8
+    assert all(player.cash >= 0 for player in snapshot.players)

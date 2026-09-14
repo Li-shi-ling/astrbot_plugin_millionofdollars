@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import re
 from pathlib import Path
 from types import SimpleNamespace
 
@@ -90,3 +91,43 @@ def test_plugin_initialize_creates_data_dir_and_secret(
     secret = data_dir / main_module.SECRET_FILENAME
     assert secret.exists()
     assert len(secret.read_bytes()) == 32
+
+
+def test_plugin_can_start_a_game_with_the_verified_deck(
+    main_module, monkeypatch, tmp_path
+) -> None:
+    """走 main.py 的真实路由：创建 → 加入 → 开始，验证已核验牌组可以开局。"""
+    import asyncio
+
+    monkeypatch.setattr(
+        main_module.StarTools,
+        "get_data_dir",
+        classmethod(lambda cls, name=None: tmp_path / (name or "plugin")),
+    )
+    plugin = main_module.MillionsOfDollarsPlugin(SimpleNamespace(get_config=lambda: None))
+    asyncio.run(plugin.initialize())
+
+    def request(member: str, message_id: str) -> object:
+        return main_module.RequestContext(
+            platform_id="qq_official_instance",
+            group_openid="group-1",
+            member_openid=member,
+            display_name=member,
+            message_id=message_id,
+        )
+
+    async def play() -> tuple:
+        created = await plugin._dispatch("百万美金 创建", request("a", "m1"))
+        for index, member in enumerate(["b", "c", "d"], start=1):
+            await plugin._dispatch("百万美金 加入", request(member, f"m-join-{index}"))
+        started = await plugin._dispatch("百万美金 开始", request("a", "m-start"))
+        status = await plugin._dispatch("百万美金 状态", request("a", "m-status"))
+        return created, started, status
+
+    created, started, status = asyncio.run(play())
+
+    assert "已创建房间" in created.text
+    assert "游戏开始" in started.text
+    assert len(started.extra) == 4  # 每位玩家一条秘密选角消息
+    assert "阶段：role_selection" in status.text
+    assert re.search(r"赃物：(8|9|10|12) 百万美元", status.text)
