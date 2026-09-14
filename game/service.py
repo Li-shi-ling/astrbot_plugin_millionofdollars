@@ -775,13 +775,16 @@ class GameService:
                         Reply("操作已失效或无权执行，请重新点击按钮。"),
                     )
 
-                events, extra, reveal_cards = self._apply(snapshot, player, matched)
+                events, extra, reveal_cards, buttons = self._apply(
+                    snapshot, player, matched
+                )
                 self._repo.store_snapshot(conn, snapshot)
                 return self._store(
                     conn,
                     ctx,
                     Reply(
                         text="\n".join(events),
+                        buttons=buttons,
                         reveal_cards=reveal_cards,
                         extra=extra,
                     ),
@@ -834,19 +837,20 @@ class GameService:
         snapshot: GameSnapshot,
         player: Player,
         matched: TokenAction,
-    ) -> tuple[list[str], list[Reply], list[str]]:
+    ) -> tuple[list[str], list[Reply], list[str], list[ButtonSpec]]:
         extra: list[Reply] = []
         reveal_cards: list[str] = []
+        buttons: list[ButtonSpec] = []
         if matched.action == "choose_role":
             events = self._apply_choose_role(snapshot, player, Role(matched.params["role"]))
             if snapshot.phase is Phase.ROLE_SELECTION:
                 # 3 人局需要第二次选角：只给当前玩家重新发一组按钮
                 extra = self._role_selection_replies(snapshot, only=player)
             else:
-                # 最后一名玩家完成选角后，立刻公开匿名中央牌堆，并把谈判
-                # 操作按玩家分行发出；不能要求玩家再手动打开菜单。
+                # 最后一名玩家完成选角后，立刻公开匿名中央牌堆，并在
+                # 谈判公告下提供一套公共操作按钮。
                 reveal_cards = _table_card_keys(snapshot)
-                extra = self._negotiation_action_replies(snapshot)
+                buttons = _negotiation_action_buttons()
         elif matched.action == "snitch_choose":
             self._bump(snapshot, player)
             events = rules.resolve_snitch_designation(
@@ -889,7 +893,7 @@ class GameService:
             extra = self._post_resolution_replies(snapshot)
         else:  # pragma: no cover - 枚举与派发必须保持一致
             raise RuleError(f"未实现的动作：{matched.action}")
-        return events, extra, reveal_cards
+        return events, extra, reveal_cards, buttons
 
     def _apply_choose_role(
         self,
@@ -1046,42 +1050,6 @@ class GameService:
             )
         return replies
 
-    def _negotiation_action_replies(self, snapshot: GameSnapshot) -> list[Reply]:
-        """为每名仍在场玩家生成一行仅本人可操作的谈判按钮。"""
-        replies: list[Reply] = []
-        for player in snapshot.players:
-            if not player.has_active_slot():
-                continue
-            actions: list[tuple[str, str]] = []
-            if player.cash > 0 and len(snapshot.players) > 1:
-                actions.append(("transfer", "转账"))
-            actions.extend(
-                [
-                    ("leave", "退出本轮"),
-                    ("ready", "准备"),
-                ]
-            )
-            if player.threat_cards > 0:
-                actions.append(("threat", "使用威胁牌"))
-            actions.append(("status", "查看状态"))
-            buttons = [
-                _menu_button(
-                    f"negotiation_{action}_{player.join_order}",
-                    label,
-                    f"{MENU_COMMAND_PREFIX}{MENU_COMMAND_NAMES[f'menu_{action}']}",
-                    0,
-                    only_for=player.member_openid,
-                )
-                for action, label in actions
-            ]
-            replies.append(
-                Reply(
-                    text=f"{player.display_name}的谈判操作。",
-                    buttons=buttons,
-                )
-            )
-        return replies
-
     # ------------------------------------------------------------------
     # 事务辅助
     # ------------------------------------------------------------------
@@ -1171,6 +1139,21 @@ def _lobby_buttons(_snapshot: GameSnapshot) -> list[ButtonSpec]:
             f"{MENU_COMMAND_PREFIX}退出房间",
         ),
         _public_button("lobby_start", "开始", f"{MENU_COMMAND_PREFIX}开始"),
+    ]
+
+
+def _negotiation_action_buttons() -> list[ButtonSpec]:
+    """谈判公告共用按钮；实际玩家身份始终取自点击后的消息发送者。"""
+    return [
+        _public_button("negotiation_transfer", "转账", f"{MENU_COMMAND_PREFIX}转账"),
+        _public_button("negotiation_leave", "退出本轮", f"{MENU_COMMAND_PREFIX}退出"),
+        _public_button("negotiation_ready", "准备", f"{MENU_COMMAND_PREFIX}准备"),
+        _public_button(
+            "negotiation_threat",
+            "使用威胁牌",
+            f"{MENU_COMMAND_PREFIX}使用威胁牌",
+        ),
+        _public_button("negotiation_status", "查看状态", f"{MENU_COMMAND_PREFIX}状态"),
     ]
 
 
@@ -1391,7 +1374,7 @@ def _public_role_text(snapshot: GameSnapshot, card: LootCard) -> str:
         f"**保证金**：每个人物 {card.ante} 百万美元\n"
         f"**奖励角色**：{bonus}\n"
         f"**公开角色**：{counts or '无'}\n\n"
-        "> 请直接在群里交涉，再使用自己那一行的谈判按钮。"
+        "> 请直接在群里交涉，再使用下方公共谈判按钮。"
     )
 
 

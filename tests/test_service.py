@@ -236,18 +236,15 @@ async def test_role_selection_moves_to_negotiation_and_collects_ante(
     assert reply.reveal_cards.count("card_back") == 1
     assert "## 第 1 轮 · 谈判开始" in reply.text
     assert "**公开角色**" in reply.text
-    assert len(reply.extra) == 4
-    for player_reply in reply.extra:
-        assert player_reply.buttons
-        assert {button.label for button in player_reply.buttons} >= {
-            "转账",
-            "退出本轮",
-            "准备",
-            "查看状态",
-        }
-        target_ids = {button.only_for for button in player_reply.buttons}
-        assert len(target_ids) == 1
-        assert None not in target_ids
+    assert reply.extra == []
+    assert [button.label for button in reply.buttons] == [
+        "转账",
+        "退出本轮",
+        "准备",
+        "使用威胁牌",
+        "查看状态",
+    ]
+    assert all(button.only_for is None for button in reply.buttons)
 
 
 async def test_three_players_choose_two_different_roles(service: GameService) -> None:

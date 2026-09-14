@@ -88,7 +88,7 @@ REGISTERED_COMMANDS = (
 """AstrBot 指令列表中公开显示的完整命令。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.7")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.8")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
