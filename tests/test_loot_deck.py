@@ -93,6 +93,14 @@ def test_source_index_covers_every_card_and_files_exist() -> None:
         assert target.stat().st_size > 0
 
 
+def test_every_builtin_card_has_display_name_and_sendable_image() -> None:
+    for card in loot.build_deck():
+        assert loot.card_name(card) != card.card_id
+        relative = loot.card_image_path(card)
+        assert relative is not None
+        assert (PLUGIN_ROOT / relative).is_file()
+
+
 def test_deck_distribution_matches_2016_reference() -> None:
     deck = loot.build_deck()
 

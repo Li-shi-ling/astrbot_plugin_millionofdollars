@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import random
 
 import pytest
@@ -128,6 +129,28 @@ async def test_lobby_flow_and_rejections(service: GameService) -> None:
     assert "3～8" in (await service.start(ctx("a", "m6", "小明"))).text
 
 
+async def test_simultaneous_joins_keep_every_player_and_unique_counts(
+    service: GameService,
+) -> None:
+    await service.create(ctx("leader", "create", "首领"))
+
+    replies = await asyncio.gather(
+        *(
+            service.join(ctx(f"user-{index}", f"join-{index}", f"玩家{index}"))
+            for index in range(1, 8)
+        )
+    )
+
+    snapshot = service._repo.load("qq_official_instance", "group-1")
+    assert snapshot is not None
+    assert len(snapshot.players) == 8
+    assert len({player.member_openid for player in snapshot.players}) == 8
+    assert {
+        reply.text.split("（", 1)[1].split("）", 1)[0]
+        for reply in replies
+    } == {f"{count}/8 人" for count in range(2, 9)}
+
+
 async def test_status_reports_phase_without_leaking_hidden_roles(
     service: GameService,
 ) -> None:
@@ -158,6 +181,28 @@ async def test_start_deals_eight_cards_and_private_buttons(service: GameService)
         assert len(item.buttons) == 3  # 4 人局只有司机、暴徒、恶棍
         assert item.buttons[0].only_for is not None
         assert item.buttons[0].data.startswith(ACTION_COMMAND_PREFIX)
+
+
+async def test_real_deck_start_includes_loot_image_and_bonus_details(
+    tmp_path, clock
+) -> None:
+    repository = GameRepository(tmp_path / "real-deck.sqlite3")
+    repository.initialize()
+    real_service = GameService(
+        repository,
+        TokenSigner(SECRET),
+        now=clock,
+        rng=random.Random(7),
+    )
+
+    reply = await start_game(real_service, ["a", "b", "c", "d", "e"])
+
+    assert reply.images
+    assert (service_help_path(reply.images[0])).is_file()
+    assert "## 🎲 游戏开始" in reply.text
+    assert "**保证金**" in reply.text
+    assert "**奖励角色**" in reply.text
+    assert "额外获得 1 百万美元" in reply.text or "**奖励角色**：无" in reply.text
 
 
 async def test_role_selection_moves_to_negotiation_and_collects_ante(

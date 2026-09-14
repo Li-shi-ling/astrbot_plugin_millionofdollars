@@ -325,8 +325,10 @@ class GameService:
                 self._repo.store_snapshot(conn, snapshot)
 
                 card = snapshot.current_loot
+                image = loot_module.card_image_path(card) if card is not None else None
                 reply = Reply(
                     text=_opening_text(snapshot, card),
+                    images=[image] if image else [],
                     extra=self._role_selection_replies(snapshot),
                 )
                 return self._store(conn, ctx, reply)
@@ -1261,7 +1263,7 @@ def _menu_text(snapshot: GameSnapshot | None, ctx: RequestContext) -> str:
     if snapshot.phase is Phase.ROLE_SELECTION:
         return (
             "## 百万美金（选角中）\n"
-            "每位玩家的选角按钮已经单独发给你自己，只有本人能看到，选完请点按钮发送。\n\n"
+            "选角按钮已经按玩家发出，每行只有对应玩家可以操作，选完请点按钮发送。\n\n"
             "点「查看状态」可以看进度。"
         )
     if snapshot.phase is Phase.NEGOTIATION:
@@ -1352,11 +1354,26 @@ def _public_role_text(snapshot: GameSnapshot, card: LootCard) -> str:
 
 def _opening_text(snapshot: GameSnapshot, card: LootCard | None) -> str:
     names = "、".join(player.display_name for player in snapshot.players)
-    amount = f"{card.amount} 百万美元" if card else "未知"
+    if card is None:
+        loot_lines = "- **赃物牌**：未知"
+    else:
+        bonus = (
+            f"{role_label(card.bonus_role)}（成功分赃时额外获得 1 百万美元）"
+            if card.bonus_role is not None
+            else "无"
+        )
+        loot_lines = (
+            f"- **地点**：{loot_module.card_name(card)}\n"
+            f"- **赃款**：{card.amount} 百万美元\n"
+            f"- **保证金**：每个人物 {card.ante} 百万美元\n"
+            f"- **奖励角色**：{bonus}"
+        )
     return (
-        f"游戏开始，共 {len(snapshot.players)} 人：{names}。\n"
-        f"第 1 轮赃物牌：赃款 {amount}。\n"
-        "每位玩家会收到只对自己可见的选角按钮；选角进度可以通过状态按钮查看。"
+        "## 🎲 游戏开始\n"
+        f"**玩家（{len(snapshot.players)} 人）**：{names}\n\n"
+        "### 第 1 轮赃物牌\n"
+        f"{loot_lines}\n\n"
+        "> 选角按钮将按玩家分行发送；每行只有对应玩家可以操作。"
     )
 
 

@@ -77,6 +77,38 @@ LOOT_DECK_SOURCE_INDEX: tuple[str, ...] = (
     "loot-10: docs/sources/loot-cards/cards/10_first_bank.jpg",
 )
 
+LOOT_CARD_NAMES: dict[str, str] = {
+    "loot-01": "拉斯维加斯赌场",
+    "loot-02": "皇家赌场",
+    "loot-03": "国家银行",
+    "loot-04": "州际银行",
+    "loot-05": "中央银行",
+    "loot-06": "城市银行",
+    "loot-07": "县级银行",
+    "loot-08": "农村信用社",
+    "loot-09": "诺克斯堡金库",
+    "loot-10": "第一银行",
+}
+
+LOOT_CARD_IMAGE_PATHS: dict[str, str] = {
+    card_id.strip(): path.strip()
+    for entry in LOOT_DECK_SOURCE_INDEX
+    for card_id, separator, path in (entry.partition(":"),)
+    if separator
+}
+
+
+def card_name(card: LootCard | str) -> str:
+    """返回赃物牌的中文名；自定义牌组没有名称时回退到编号。"""
+    card_id = card.card_id if isinstance(card, LootCard) else str(card)
+    return LOOT_CARD_NAMES.get(card_id, card_id)
+
+
+def card_image_path(card: LootCard | str) -> str | None:
+    """返回内置赃物牌图片的插件相对路径。"""
+    card_id = card.card_id if isinstance(card, LootCard) else str(card)
+    return LOOT_CARD_IMAGE_PATHS.get(card_id)
+
 
 def validate_deck(entries: Sequence[dict[str, object]]) -> tuple[LootCard, ...]:
     """校验并转换牌组常量，任意一项不合法即抛错。"""

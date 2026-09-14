@@ -208,6 +208,18 @@ def test_build_payload_falls_back_to_plain_text() -> None:
     assert payload["content"] == "纯文本"
 
 
+def test_build_payload_keeps_markdown_without_keyboard() -> None:
+    payload = qqofficial.build_payload(
+        Reply(text="## 🎲 游戏开始\n- **奖励角色**：恶棍")
+    )
+
+    assert payload["msg_type"] == 2
+    assert payload["markdown"] == {
+        "content": "## 🎲 游戏开始\n- **奖励角色**：恶棍"
+    }
+    assert payload["keyboard"] is None
+
+
 # ----------------------------------------------------------------------
 # 被动回复
 # ----------------------------------------------------------------------
@@ -323,6 +335,86 @@ async def test_send_reply_sends_extra_messages(monkeypatch) -> None:
     assert [item["content"] for item in calls] == ["公开信息", "你的秘密按钮"]
     assert [item["msg_seq"] for item in calls] == [1, 2]
     assert calls[1]["keyboard"]["content"]["rows"][0]["buttons"][0]["action"]["type"] == 2
+
+
+@pytest.mark.asyncio
+async def test_send_reply_batches_five_players_role_buttons(monkeypatch) -> None:
+    """5 人局不能为一次开局事件连续发送 6 条被动回复。"""
+    monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
+    calls: list = []
+    event = _send_event(calls)
+    context = qqofficial.QQOfficialContext(
+        platform_id="instance-1",
+        group_openid="group-1",
+        member_openid="leader",
+        display_name="首领",
+        message_id="msg-1",
+        msg_seq=1,
+    )
+    extras = [
+        Reply(
+            text=f"玩家{player}，请秘密选择角色（第 1/1 个）。",
+            buttons=[
+                ButtonSpec(
+                    f"role_{role}",
+                    f"角色{role}",
+                    f"百万美金操作 token-{player}-{role}",
+                    only_for=f"user-{player}",
+                )
+                for role in range(4)
+            ],
+        )
+        for player in range(5)
+    ]
+
+    ok = await qqofficial.send_reply(event, context, Reply("游戏开始", extra=extras))
+
+    assert ok is True
+    assert len(calls) == 2  # 开局正文 + 一个合并键盘，不触发 QQ 的第六次被动回复
+    rows = calls[1]["keyboard"]["content"]["rows"]
+    assert len(rows) == 5
+    assert all(len(row["buttons"]) == 4 for row in rows)
+    assert {
+        row["buttons"][0]["action"]["permission"]["specify_user_ids"][0]
+        for row in rows
+    } == {f"user-{player}" for player in range(5)}
+    ids = [button["id"] for row in rows for button in row["buttons"]]
+    assert len(ids) == len(set(ids))
+
+
+@pytest.mark.asyncio
+async def test_send_reply_splits_eight_players_into_two_keyboards(monkeypatch) -> None:
+    monkeypatch.setattr(qqofficial.botpy_message, "GroupMessage", _FakeGroupMessage)
+    calls: list = []
+    event = _send_event(calls)
+    context = qqofficial.QQOfficialContext(
+        platform_id="instance-1",
+        group_openid="group-1",
+        member_openid="leader",
+        display_name="首领",
+        message_id="msg-1",
+    )
+    extras = [
+        Reply(
+            text=f"玩家{player}，请秘密选择角色（第 1/1 个）。",
+            buttons=[
+                ButtonSpec(
+                    f"role_{role}",
+                    f"角色{role}",
+                    f"百万美金操作 token-{player}-{role}",
+                    only_for=f"user-{player}",
+                )
+                for role in range(5)
+            ],
+        )
+        for player in range(8)
+    ]
+
+    ok = await qqofficial.send_reply(event, context, Reply("游戏开始", extra=extras))
+
+    assert ok is True
+    assert len(calls) == 3  # 正文 + 5 人键盘 + 3 人键盘
+    assert [len(call["keyboard"]["content"]["rows"]) for call in calls[1:]] == [5, 3]
 
 
 @pytest.mark.asyncio

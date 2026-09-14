@@ -9,6 +9,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import sys
 from pathlib import Path
 
@@ -87,11 +88,12 @@ REGISTERED_COMMANDS = (
 """AstrBot 指令列表中公开显示的完整命令。"""
 
 
-@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.5")
+@register(PLUGIN_NAME, "Li-shi-ling", "《百万美金》桌游插件", "v1.7.6")
 class MillionsOfDollarsPlugin(Star):
     def __init__(self, context: Context):
         super().__init__(context)
         self._service: GameService | None = None
+        self._room_command_locks: dict[tuple[str, str], asyncio.Lock] = {}
 
     async def initialize(self) -> None:
         data_dir = StarTools.get_data_dir(PLUGIN_NAME)
@@ -103,6 +105,7 @@ class MillionsOfDollarsPlugin(Star):
 
     async def terminate(self) -> None:
         self._service = None
+        self._room_command_locks.clear()
         logger.info("[百万美金] 插件已卸载。")
 
     # ------------------------------------------------------------------
@@ -247,27 +250,32 @@ class MillionsOfDollarsPlugin(Star):
                 yield event.plain_result("插件尚未初始化完成，请稍后重试。")
                 return
 
-            request = RequestContext(
-                platform_id=context.platform_id,
-                group_openid=context.group_openid,
-                member_openid=context.member_openid,
-                display_name=context.display_name,
-                message_id=context.message_id,
-                is_admin=_is_admin(event),
-            )
-            try:
-                reply = await self._dispatch(event.get_message_str(), request)
-            except RuleError as exc:
-                reply = Reply(str(exc))
-            except loot_module.DeckNotVerifiedError as exc:
-                reply = Reply(f"暂时无法开局：{exc}")
-            except Exception as exc:  # noqa: BLE001 - 兜底，避免插件异常中断
-                logger.exception("[百万美金] 处理指令失败：%s", exc)
-                reply = Reply("处理指令时出错，请稍后重试或联系管理员查看日志。")
-            if reply is None:
-                return
+            room_key = (context.platform_id, context.group_openid)
+            room_lock = self._room_command_locks.setdefault(room_key, asyncio.Lock())
+            # 游戏服务内部的锁保护状态；这里再把“处理 + 发送”串行化，避免两名
+            # 玩家同时点击加入时，后生成的房间人数先显示在群里。
+            async with room_lock:
+                request = RequestContext(
+                    platform_id=context.platform_id,
+                    group_openid=context.group_openid,
+                    member_openid=context.member_openid,
+                    display_name=context.display_name,
+                    message_id=context.message_id,
+                    is_admin=_is_admin(event),
+                )
+                try:
+                    reply = await self._dispatch(event.get_message_str(), request)
+                except RuleError as exc:
+                    reply = Reply(str(exc))
+                except loot_module.DeckNotVerifiedError as exc:
+                    reply = Reply(f"暂时无法开局：{exc}")
+                except Exception as exc:  # noqa: BLE001 - 兜底，避免插件异常中断
+                    logger.exception("[百万美金] 处理指令失败：%s", exc)
+                    reply = Reply("处理指令时出错，请稍后重试或联系管理员查看日志。")
+                if reply is None:
+                    return
 
-            await qqofficial.send_reply(event, context, reply)
+                await qqofficial.send_reply(event, context, reply)
         finally:
             _stop_llm(event)
 
